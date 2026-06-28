@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Dict, List, Tuple
 from urllib.parse import urljoin, urlparse, urlencode, parse_qs, unquote
 
@@ -35,7 +36,7 @@ def _abs_url(page_url: str, ref: str) -> str:
 
 def _fix_asset_urls(soup: BeautifulSoup, page_url: str) -> None:
     """Load JS/CSS/images from real site — not via localhost (fixes blank page)."""
-    for tag in soup.find_all(["script", "img", "source", "video", "audio", "iframe"]):
+    for tag in soup.find_all(["script", "img", "source", "video", "audio"]):
         if tag.get("src"):
             ref = tag["src"].strip()
             if ref and not ref.lower().startswith(("data:", "javascript:", "#")):
@@ -52,6 +53,85 @@ def _fix_asset_urls(soup: BeautifulSoup, page_url: str) -> None:
             or href.endswith((".css", ".woff2", ".woff", ".ttf"))
         ):
             tag["href"] = _abs_url(page_url, href)
+
+
+def _proxy_iframes(soup: BeautifulSoup, page_url: str, session_id: str) -> None:
+    for tag in soup.find_all("iframe", src=True):
+        ref = tag["src"].strip()
+        if not ref or ref.lower().startswith(("data:", "javascript:")):
+            continue
+        absolute = _abs_url(page_url, ref)
+        if _is_navigable(absolute):
+            try:
+                validate_allowed_domain(absolute)
+                tag["src"] = _proxy_link(absolute, session_id)
+            except ValueError:
+                tag["src"] = absolute
+
+
+def _inject_navigation_guard(soup: BeautifulSoup, page_url: str, session_id: str) -> None:
+    parsed = urlparse(page_url)
+    site_origin = f"{parsed.scheme}://{parsed.netloc}"
+    guard = soup.new_tag("script")
+    guard.string = f"""
+(function() {{
+  var SID = {json.dumps(session_id)};
+  var PROXY = {json.dumps(PROXY_PATH)};
+  var SITE = {json.dumps(site_origin)};
+
+  function proxyUrl(target) {{
+    if (!target || String(target).charAt(0) === '#') return target;
+    if (String(target).indexOf('javascript:') === 0) return target;
+    try {{
+      var u = new URL(target, SITE);
+      if (u.pathname.indexOf(PROXY) === 0) return u.href;
+      return PROXY + '?sid=' + encodeURIComponent(SID) + '&url=' + encodeURIComponent(u.href);
+    }} catch (e) {{ return target; }}
+  }}
+
+  function wrapHistory() {{
+    ['pushState', 'replaceState'].forEach(function(fn) {{
+      var orig = history[fn];
+      history[fn] = function(state, title, url) {{
+        if (url) url = proxyUrl(url);
+        return orig.call(this, state, title, url);
+      }};
+    }});
+  }}
+
+  document.addEventListener('click', function(e) {{
+    var a = e.target.closest && e.target.closest('a[href]');
+    if (!a) return;
+    var href = a.getAttribute('href');
+    if (!href || href.charAt(0) === '#') return;
+    var proxied = proxyUrl(href);
+    if (proxied && proxied.indexOf(PROXY) >= 0 && a.href !== proxied) {{
+      e.preventDefault();
+      location.assign(proxied);
+    }}
+  }}, true);
+
+  try {{
+    var desc = Object.getOwnPropertyDescriptor(Location.prototype, 'href');
+    if (desc && desc.set) {{
+      Object.defineProperty(Location.prototype, 'href', {{
+        get: desc.get,
+        set: function(v) {{ desc.set.call(this, proxyUrl(v)); }},
+        configurable: true
+      }});
+    }}
+    var a = Location.prototype.assign;
+    Location.prototype.assign = function(u) {{ return a.call(this, proxyUrl(u)); }};
+    var r = Location.prototype.replace;
+    Location.prototype.replace = function(u) {{ return r.call(this, proxyUrl(u)); }};
+  }} catch (e) {{}}
+
+  wrapHistory();
+}})();
+"""
+    head = soup.find("head")
+    if head:
+        head.insert(0, guard)
 
 
 def rewrite_html(html: str, page_url: str, session_id: str) -> str:
@@ -84,6 +164,21 @@ def rewrite_html(html: str, page_url: str, session_id: str) -> str:
         head.insert(0, base_tag)
 
     _fix_asset_urls(soup, page_url)
+    _proxy_iframes(soup, page_url, session_id)
+    _inject_navigation_guard(soup, page_url, session_id)
+
+    for tag in soup.find_all("meta"):
+        http_equiv = (tag.get("http-equiv") or "").lower()
+        if http_equiv == "refresh" and tag.get("content"):
+            parts = tag["content"].split("url=", 1)
+            if len(parts) == 2:
+                target = parts[1].strip().strip("'\"")
+                absolute = _abs_url(page_url, target)
+                try:
+                    validate_allowed_domain(absolute)
+                    tag["content"] = parts[0] + "url=" + _proxy_link(absolute, session_id)
+                except ValueError:
+                    pass
 
     for tag in soup.find_all("a", href=True):
         href = tag["href"].strip()

@@ -125,9 +125,10 @@
       <div class="browser-frame-wrap">
         <div class="frame-loading show" id="frameLoading">Đang tải trang...</div>
         <div class="frame-overlay" id="frameOverlay">
-          <strong>Trang trắng / không hiển thị</strong>
-          <p>Site có thể dùng JavaScript phức tạp hoặc chặn embed.<br>
-          Thử: nhấn <strong>Demo</strong> để test, hoặc mở link bằng Chrome bình thường rồi copy cURL.</p>
+          <strong>Trang trắng / refused to connect</strong>
+          <p>Site nhảy ra khỏi proxy (chặn iframe) hoặc cần JavaScript đặc biệt.<br>
+          Thử <strong>Tải lại</strong> hoặc nhấn <strong>Demo</strong> để test.<br>
+          Site phức tạp: login bằng Chrome → F12 → Copy as cURL.</p>
           <button type="button" class="btn" id="retryBtn" style="margin-top:1rem;flex:none">Tải lại</button>
         </div>
         <iframe id="browserFrame" title="Trình duyệt"></iframe>
