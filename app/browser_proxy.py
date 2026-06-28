@@ -33,6 +33,23 @@ def _is_navigable(url: str) -> bool:
 def rewrite_html(html: str, page_url: str, session_id: str) -> str:
     soup = BeautifulSoup(html, "html.parser")
 
+    if not soup.find("meta", attrs={"name": "viewport"}):
+        viewport = soup.new_tag("meta", attrs={"name": "viewport", "content": "width=device-width, initial-scale=1.0"})
+        head = soup.find("head")
+        if head:
+            head.insert(0, viewport)
+        elif soup.html:
+            soup.html.insert(0, viewport)
+
+    style = soup.new_tag("style")
+    style.string = """
+    html { overflow-x: auto !important; }
+    body { overflow-x: auto !important; min-height: 100vh; }
+    """
+    head = soup.find("head")
+    if head:
+        head.append(style)
+
     for tag in soup.find_all("a", href=True):
         href = tag["href"].strip()
         if href.startswith("#") or href.lower().startswith("javascript:"):

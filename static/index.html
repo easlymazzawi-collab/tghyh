@@ -17,12 +17,22 @@
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); }
-    .wrap { max-width: 1000px; margin: 0 auto; padding: 1.25rem; }
+    .wrap { max-width: 100%; margin: 0 auto; padding: 1rem 1.25rem 2rem; }
     h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
-    .sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 1rem; }
+    .sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 0.75rem; }
+    .browser-shell {
+      display: flex; flex-direction: column;
+      border: 1px solid var(--border); border-radius: 10px;
+      background: var(--surface); overflow: hidden;
+      height: calc(100vh - 220px); min-height: 620px;
+    }
+    .browser-shell.fullscreen {
+      position: fixed; inset: 0; z-index: 9999;
+      height: 100vh !important; min-height: 0; border-radius: 0; margin: 0;
+    }
     .browser-bar {
-      display: flex; gap: 0.5rem; background: var(--surface);
-      border: 1px solid var(--border); border-radius: 10px 10px 0 0; padding: 0.6rem;
+      display: flex; gap: 0.5rem; flex-shrink: 0;
+      border-bottom: 1px solid var(--border); padding: 0.6rem;
     }
     .browser-bar input {
       flex: 1; background: #0f1419; border: 1px solid var(--border);
@@ -34,9 +44,22 @@
     }
     .browser-bar button:disabled, .btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn.secondary { background: #243044; border: 1px solid var(--border); }
+    .btn.icon { flex: 0 0 auto; min-width: 2.5rem; padding: 0.55rem 0.75rem; }
+    .browser-frame-wrap { flex: 1; min-height: 0; position: relative; background: #fff; }
     #browserFrame {
-      width: 100%; height: 420px; border: 1px solid var(--border);
-      border-top: none; border-radius: 0 0 10px 10px; background: #fff;
+      width: 100%; height: 100%; border: none; display: block; background: #fff;
+    }
+    .resize-handle {
+      flex-shrink: 0; height: 8px; cursor: ns-resize;
+      background: linear-gradient(180deg, #243044, #1a2332);
+      border-top: 1px solid var(--border);
+    }
+    .resize-handle:hover { background: var(--accent); }
+    .bottom-panel { margin-top: 1rem; }
+    .bottom-panel.collapsed .panel-body { display: none; }
+    .panel-toggle {
+      background: none; border: none; color: var(--muted); cursor: pointer;
+      font-size: 0.8rem; float: right; padding: 0;
     }
     .card {
       background: var(--surface); border: 1px solid var(--border);
@@ -79,29 +102,41 @@
       <strong>3.</strong> Nhập danh sách acc → <strong>Chạy cho tất cả</strong>
     </p>
 
-    <div class="browser-bar">
-      <input type="url" id="urlInput" placeholder="http://localhost:8080/mock/login-page" />
-      <button type="button" id="goBtn">Đi</button>
-      <button type="button" class="secondary" id="demoBtn" style="background:#243044;border:1px solid var(--border)">Demo</button>
+    <div class="browser-shell" id="browserShell">
+      <div class="browser-bar">
+        <input type="url" id="urlInput" placeholder="http://localhost:8080/mock/login-page" />
+        <button type="button" id="goBtn">Đi</button>
+        <button type="button" class="secondary" id="demoBtn" style="background:#243044;border:1px solid var(--border)">Demo</button>
+        <button type="button" class="secondary icon" id="fullscreenBtn" title="Phóng to toàn màn hình">⛶</button>
+      </div>
+      <div class="browser-frame-wrap">
+        <iframe id="browserFrame" title="Trình duyệt"></iframe>
+      </div>
+      <div class="resize-handle" id="resizeHandle" title="Kéo để đổi chiều cao"></div>
     </div>
-    <iframe id="browserFrame" title="Trình duyệt"></iframe>
 
     <div class="status wait" id="recordStatus">Chưa ghi login — hãy đăng nhập 1 lần trong khung trên.</div>
 
-    <div class="card">
-      <h2>Danh sách tài khoản (user:pass, mỗi dòng)</h2>
+    <div class="bottom-panel" id="bottomPanel">
+      <div class="card">
+        <h2>Danh sách tài khoản (user:pass, mỗi dòng)
+          <button type="button" class="panel-toggle" id="togglePanel">Thu gọn ▲</button>
+        </h2>
+        <div class="panel-body">
       <textarea id="credList" placeholder="user1:pass111&#10;user2:pass222&#10;demo:demo2024"></textarea>
       <div style="margin-top:0.75rem;display:flex;gap:0.5rem">
         <button class="btn" id="runBtn" style="flex:1" disabled>Chạy cho tất cả acc</button>
       </div>
+        </div>
+      </div>
     </div>
 
-    <div class="card" style="margin-top:0.75rem">
-      <h2>Domain không mở được?</h2>
-      <p class="sub" style="margin-bottom:0.5rem">Thêm dòng domain vào mảng <code>allowed_domains</code> trong <code>config.json</code> (nhớ dấu phẩy giữa các dòng):</p>
+    <details class="card" style="margin-top:0.75rem">
+      <summary style="cursor:pointer;font-weight:600">Domain không mở được? (bấm để xem)</summary>
+      <p class="sub" style="margin:0.75rem 0 0.5rem">Thêm domain vào <code>config.json</code>:</p>
       <textarea id="configHint" readonly style="min-height:90px;font-size:0.8rem"></textarea>
-      <p class="sub" style="margin-top:0.35rem">Lỗi config? Chạy <code>fix-config.bat</code> rồi mở lại <code>start.bat</code></p>
-    </div>
+      <p class="sub" style="margin-top:0.35rem">Lỗi config? Chạy <code>fix-config.bat</code></p>
+    </details>
 
     <div class="card" id="resultCard" style="display:none">
       <h2>Kết quả</h2>
@@ -222,6 +257,50 @@
     $("goBtn").addEventListener("click", () => navigate($("urlInput").value));
     $("urlInput").addEventListener("keydown", (e) => { if (e.key === "Enter") navigate($("urlInput").value); });
     $("runBtn").addEventListener("click", runAll);
+
+    $("fullscreenBtn").addEventListener("click", () => {
+      const shell = $("browserShell");
+      const on = shell.classList.toggle("fullscreen");
+      $("fullscreenBtn").textContent = on ? "✕" : "⛶";
+      $("fullscreenBtn").title = on ? "Thu nhỏ" : "Phóng to toàn màn hình";
+    });
+
+    $("togglePanel").addEventListener("click", () => {
+      const panel = $("bottomPanel");
+      const collapsed = panel.classList.toggle("collapsed");
+      $("togglePanel").textContent = collapsed ? "Mở rộng ▼" : "Thu gọn ▲";
+    });
+
+    (function initResize() {
+      const shell = $("browserShell");
+      const handle = $("resizeHandle");
+      let startY = 0;
+      let startH = 0;
+      handle.addEventListener("mousedown", (e) => {
+        if (shell.classList.contains("fullscreen")) return;
+        e.preventDefault();
+        startY = e.clientY;
+        startH = shell.offsetHeight;
+        const onMove = (ev) => {
+          const next = Math.max(400, Math.min(window.innerHeight - 80, startH + (ev.clientY - startY)));
+          shell.style.height = `${next}px`;
+        };
+        const onUp = () => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      });
+    })();
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && $("browserShell").classList.contains("fullscreen")) {
+        $("browserShell").classList.remove("fullscreen");
+        $("fullscreenBtn").textContent = "⛶";
+      }
+    });
+
     $("demoBtn").addEventListener("click", () => {
       const url = `${location.origin}/mock/login-page`;
       $("urlInput").value = url;
