@@ -296,9 +296,14 @@
       <div class="card">
         <h2>Cấu hình</h2>
 
-        <label for="loginUrl">URL API Login</label>
-        <input type="url" id="loginUrl" placeholder="http://localhost:8080/mock/login" />
-        <p class="hint">Demo: <code>http://localhost:8080/mock/login</code></p>
+        <label for="loginUrl">URL trang login / API</label>
+        <input type="url" id="loginUrl" placeholder="http://localhost:8080/mock/login-page" />
+        <p class="hint">API demo: <code>/mock/login</code> · HTML form demo: <code>/mock/login-page</code></p>
+
+        <div class="actions" style="margin-top:-0.25rem;margin-bottom:0.75rem">
+          <button class="btn-secondary" type="button" id="discoverBtn" style="flex:1">Tự phát hiện form login</button>
+        </div>
+        <div id="discoverInfo" class="hint" style="display:none;margin-bottom:0.9rem"></div>
 
         <div class="row-2">
           <div>
@@ -315,8 +320,9 @@
           <div>
             <label for="payloadMode">Payload</label>
             <select id="payloadMode">
-              <option value="json" selected>JSON</option>
-              <option value="form">Form-urlencoded</option>
+              <option value="json" selected>JSON API</option>
+              <option value="form">Form-urlencoded API</option>
+              <option value="html_form">HTML form (tự điền ô login)</option>
             </select>
           </div>
           <div>
@@ -390,7 +396,12 @@
     }
 
     function fillDemo() {
-      $("loginUrl").value = `${window.location.origin}/mock/login`;
+      const mode = $("payloadMode").value;
+      if (mode === "html_form") {
+        $("loginUrl").value = `${window.location.origin}/mock/login-page`;
+      } else {
+        $("loginUrl").value = `${window.location.origin}/mock/login`;
+      }
       $("credentials").value = [
         "admin:admin123",
         "user1:pass111",
@@ -398,6 +409,49 @@
         "demo:demo2024",
         "wrong:badpass",
       ].join("\n");
+    }
+
+    async function discoverForm() {
+      hideError();
+      const pageUrl = $("loginUrl").value.trim();
+      if (!pageUrl) {
+        showError("Nhập URL trang login trước khi phát hiện form.");
+        return;
+      }
+
+      $("discoverBtn").disabled = true;
+      $("discoverBtn").textContent = "Đang quét...";
+
+      try {
+        const res = await fetch("/api/discover-form", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ page_url: pageUrl }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Discover failed");
+
+        $("usernameField").value = data.username_field;
+        $("passwordField").value = data.password_field;
+        $("payloadMode").value = "html_form";
+        $("loginUrl").value = data.page_url;
+
+        const info = $("discoverInfo");
+        info.style.display = "block";
+        info.innerHTML = [
+          `Đã tìm thấy <strong>${data.all_forms_count}</strong> form, chọn form #${data.form_index + 1} (độ tin cậy: ${data.confidence})`,
+          `<br>Action: <code>${escapeHtml(data.action_url)}</code>`,
+          `<br>Method: <code>${data.method}</code>`,
+          data.hidden_fields && Object.keys(data.hidden_fields).length
+            ? `<br>Hidden fields: <code>${escapeHtml(JSON.stringify(data.hidden_fields))}</code>`
+            : "",
+        ].join("");
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        $("discoverBtn").disabled = false;
+        $("discoverBtn").textContent = "Tự phát hiện form login";
+      }
     }
 
     function renderResults(job) {
@@ -501,6 +555,7 @@
         username_field: $("usernameField").value.trim() || "username",
         password_field: $("passwordField").value.trim() || "password",
         payload_mode: $("payloadMode").value,
+        page_url: $("payloadMode").value === "html_form" ? $("loginUrl").value.trim() : "",
         max_workers: parseInt($("maxWorkers").value, 10) || 3,
         rate_limit_rps: parseFloat($("rateLimit").value) || 2,
       };
@@ -525,6 +580,13 @@
 
     $("startBtn").addEventListener("click", startTest);
     $("demoBtn").addEventListener("click", fillDemo);
+    $("discoverBtn").addEventListener("click", discoverForm);
+    $("payloadMode").addEventListener("change", () => {
+      $("discoverInfo").style.display = "none";
+      if ($("payloadMode").value === "html_form" && !$("loginUrl").value.includes("login-page")) {
+        $("loginUrl").placeholder = `${window.location.origin}/mock/login-page`;
+      }
+    });
     window.addEventListener("beforeunload", () => {
       if (pollTimer) clearTimeout(pollTimer);
     });

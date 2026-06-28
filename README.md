@@ -62,7 +62,8 @@ Chỉ URL thuộc các domain trên mới được phép test.
 | GET | `/api/config` | Cấu hình hiện tại |
 | POST | `/api/jobs` | Bắt đầu job test login |
 | GET | `/api/jobs/{job_id}` | Trạng thái & kết quả |
-| POST | `/mock/login` | Mock login API (demo) |
+| POST | `/api/discover-form` | Tự phát hiện ô username/password trên trang HTML |
+| GET | `/mock/login-page` | Trang login HTML demo |
 
 ### Ví dụ request
 
