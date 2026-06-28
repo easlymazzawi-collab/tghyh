@@ -125,18 +125,34 @@
       <div class="browser-frame-wrap">
         <div class="frame-loading show" id="frameLoading">Đang tải trang...</div>
         <div class="frame-overlay" id="frameOverlay">
-          <strong>Trang trắng / refused to connect</strong>
-          <p>Site nhảy ra khỏi proxy (chặn iframe) hoặc cần JavaScript đặc biệt.<br>
-          Thử <strong>Tải lại</strong> hoặc nhấn <strong>Demo</strong> để test.<br>
-          Site phức tạp: login bằng Chrome → F12 → Copy as cURL.</p>
-          <button type="button" class="btn" id="retryBtn" style="margin-top:1rem;flex:none">Tải lại</button>
+          <strong id="overlayTitle">Trang không hiển thị được</strong>
+          <p id="overlayText">Site dạng Vue/React (như Cloudzy) + reCAPTCHA không chạy trong khung embed.<br>
+          Dùng <strong>Chế độ cURL</strong> bên dưới ↓</p>
+          <button type="button" class="btn" id="openChromeBtn" style="margin-top:0.75rem;flex:none">Mở bằng Chrome</button>
+          <button type="button" class="btn secondary" id="retryBtn" style="margin-top:0.5rem;flex:none">Tải lại</button>
         </div>
         <iframe id="browserFrame" title="Trình duyệt"></iframe>
       </div>
       <div class="resize-handle" id="resizeHandle" title="Kéo để đổi chiều cao"></div>
     </div>
 
-    <div class="status wait" id="recordStatus">Chưa ghi login — hãy đăng nhập 1 lần trong khung trên.</div>
+    <div class="status wait" id="recordStatus">Chưa ghi login — login trong khung trên, hoặc dùng Chế độ cURL.</div>
+
+    <div class="card" style="border-color:#22c55e">
+      <h2>Chế độ cURL — cho Cloudzy &amp; site phức tạp</h2>
+      <p class="sub" style="margin-bottom:0.75rem">
+        1. Mở site bằng <strong>Chrome</strong> → login thử 1 acc<br>
+        2. F12 → Network → chọn request login → chuột phải → <strong>Copy → Copy as cURL</strong><br>
+        3. Dán vào ô dưới → <strong>Ghi &amp; Chạy</strong>
+      </p>
+      <label for="sampleCred">Tài khoản mẫu (user:pass — đúng acc vừa login)</label>
+      <input type="text" id="sampleCred" placeholder="email@mail.com:matkhau123" style="width:100%;background:#0f1419;border:1px solid var(--border);border-radius:8px;color:var(--text);padding:0.6rem;margin-bottom:0.75rem" />
+      <label for="curlInput">Dán lệnh cURL</label>
+      <textarea id="curlInput" style="min-height:100px" placeholder="curl 'https://panel.cloudzy.com/api/...' -H 'Content-Type: application/json' --data-raw '{...}'"></textarea>
+      <div style="margin-top:0.75rem;display:flex;gap:0.5rem">
+        <button class="btn" id="curlRunBtn" style="flex:1">Ghi từ cURL &amp; Chạy tất cả acc</button>
+      </div>
+    </div>
 
     <div class="bottom-panel" id="bottomPanel">
       <div class="card">
@@ -180,6 +196,10 @@
       $("error").classList.remove("show");
     }
 
+    $("browserFrame").addEventListener("load", () => {
+      setTimeout(checkFrameContent, 2000);
+    });
+
     function navigate(url) {
       hideError();
       const target = url.trim();
@@ -188,6 +208,17 @@
       $("frameOverlay").classList.remove("show");
       const proxy = `/browser/go?sid=${encodeURIComponent(sessionId)}&url=${encodeURIComponent(target)}`;
       $("browserFrame").src = proxy;
+    }
+
+    function showSpaOverlay(url) {
+      $("frameLoading").classList.remove("show");
+      $("overlayTitle").textContent = "Cloudzy / Vue SPA — không dùng được khung embed";
+      $("overlayText").innerHTML =
+        "Trang này cần JavaScript + reCAPTCHA trên domain thật.<br>" +
+        "Tool đã tải HTML (200 OK) nhưng form login không render trong iframe.<br>" +
+        "<strong>Dùng 「Chế độ cURL」 bên dưới</strong> — hoặc nhấn 「Mở bằng Chrome」.";
+      $("frameOverlay").classList.add("show");
+      $("urlInput").dataset.external = url;
     }
 
     function checkFrameContent() {
@@ -200,19 +231,80 @@
           $("frameOverlay").classList.add("show");
           return;
         }
+        const app = doc.querySelector("#app");
+        const isVueSpa = app && !app.querySelector("input,form,button") &&
+          [...doc.scripts].some((s) => s.src && (s.src.includes("/js/app") || s.src.includes("chunk-vendors")));
+        const isRecaptcha = body.innerHTML.includes("recaptcha");
+        if (isVueSpa || isRecaptcha) {
+          showSpaOverlay($("urlInput").value);
+          return;
+        }
         const text = (body.innerText || "").trim();
         const hasInput = body.querySelector("input, form, button, img, svg, canvas, table");
         if (text.length < 3 && !hasInput) {
+          $("overlayTitle").textContent = "Trang trắng";
+          $("overlayText").innerHTML = "Không thấy nội dung. Thử <strong>Demo</strong> hoặc <strong>Chế độ cURL</strong>.";
           $("frameOverlay").classList.add("show");
         }
       } catch (e) {
-        /* cross-origin shouldn't happen with our proxy */
+        /* ignore */
       }
     }
 
-    $("browserFrame").addEventListener("load", () => {
-      setTimeout(checkFrameContent, 1500);
+    $("openChromeBtn").addEventListener("click", () => {
+      const url = $("urlInput").value.trim();
+      if (url) window.open(url, "_blank");
     });
+
+    async function curlRecordAndRun() {
+      hideError();
+      const curl = $("curlInput").value.trim();
+      const sample = $("sampleCred").value.trim();
+      if (!curl) return showError("Dán lệnh cURL từ Chrome DevTools.");
+      if (!sample || !sample.includes(":")) return showError("Nhập tài khoản mẫu dạng user:pass.");
+      if (!$("credList").value.trim()) return showError("Nhập danh sách acc.");
+
+      $("curlRunBtn").disabled = true;
+      try {
+        const rec = await fetch("/api/record-login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "curl-recipe",
+            curl_command: curl,
+            credentials: sample,
+            verify_sample: false,
+          }),
+        });
+        const recData = await rec.json();
+        if (!rec.ok) throw new Error(recData.detail || "Ghi cURL thất bại");
+
+        savedRecipe = recData.recipe;
+        setRecorded(recData.message || "Đã ghi từ cURL");
+
+        const rep = await fetch("/api/replay", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            recipe: savedRecipe,
+            credentials: $("credList").value,
+            max_workers: 3,
+            rate_limit_rps: 2,
+          }),
+        });
+        const job = await rep.json();
+        if (!rep.ok) throw new Error(job.detail || "Chạy thất bại");
+
+        $("resultCard").style.display = "block";
+        pollJob(job.job_id);
+      } catch (e) {
+        showError(e.message);
+      } finally {
+        $("curlRunBtn").disabled = false;
+      }
+    }
+
+    $("curlRunBtn").addEventListener("click", curlRecordAndRun);
 
     $("retryBtn").addEventListener("click", () => navigate($("urlInput").value));
 
