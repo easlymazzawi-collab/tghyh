@@ -363,6 +363,8 @@
   <script>
     const $ = (id) => document.getElementById(id);
     let pollTimer = null;
+    let pollAttempts = 0;
+    const MAX_POLL_ATTEMPTS = 300;
 
     async function loadConfig() {
       const res = await fetch("/api/config");
@@ -466,6 +468,13 @@
     }
 
     async function pollJob(jobId) {
+      pollAttempts += 1;
+      if (pollAttempts > MAX_POLL_ATTEMPTS) {
+        showError("Job quá thời gian chờ. Kiểm tra URL API login và thử lại.");
+        $("startBtn").disabled = false;
+        return;
+      }
+
       const res = await fetch(`/api/jobs/${jobId}`);
       if (!res.ok) throw new Error("Không lấy được trạng thái job");
       const job = await res.json();
@@ -476,6 +485,7 @@
         pollTimer = setTimeout(() => pollJob(jobId), 800);
       } else {
         $("startBtn").disabled = false;
+        pollTimer = null;
       }
     }
 
@@ -483,6 +493,7 @@
       hideError();
       $("startBtn").disabled = true;
       if (pollTimer) clearTimeout(pollTimer);
+      pollAttempts = 0;
 
       const body = {
         login_url: $("loginUrl").value.trim(),
@@ -514,6 +525,9 @@
 
     $("startBtn").addEventListener("click", startTest);
     $("demoBtn").addEventListener("click", fillDemo);
+    window.addEventListener("beforeunload", () => {
+      if (pollTimer) clearTimeout(pollTimer);
+    });
     loadConfig().then(fillDemo);
   </script>
 </body>

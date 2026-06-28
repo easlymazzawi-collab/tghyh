@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Tuple
@@ -20,6 +21,7 @@ from app.rate_limiter import RateLimiter
 
 
 _jobs: Dict[str, JobSummary] = {}
+_jobs_lock = threading.Lock()
 
 
 def parse_credentials(raw: str) -> List[Tuple[str, str]]:
@@ -90,7 +92,6 @@ def _extract_success_details(response: httpx.Response) -> Dict[str, object]:
 
 
 def _attempt_login(
-    client: httpx.Client,
     request: TestLoginRequest,
     username: str,
     password: str,
@@ -103,47 +104,57 @@ def _attempt_login(
     }
 
     try:
-        if request.payload_mode == LoginPayloadMode.JSON:
-            response = client.post(
-                request.login_url,
-                json=payload,
-                headers=request.extra_headers or None,
+        # httpx.Client is not thread-safe — one client per worker call.
+        with httpx.Client(timeout=15.0, follow_redirects=True) as client:
+            if request.payload_mode == LoginPayloadMode.JSON:
+                response = client.post(
+                    request.login_url,
+                    json=payload,
+                    headers=request.extra_headers or None,
+                )
+            else:
+                response = client.post(
+                    request.login_url,
+                    data=payload,
+                    headers=request.extra_headers or None,
+                )
+
+            elapsed_ms = response.elapsed.total_seconds() * 1000
+            success = 200 <= response.status_code < 300
+
+            body_text = response.text.lower()
+            if success and any(
+                marker in body_text
+                for marker in ("invalid", "incorrect", "failed", "unauthorized")
+            ):
+                if response.status_code == 200 and "error" in body_text:
+                    success = False
+
+            return CredentialResult(
+                username=username,
+                success=success,
+                status_code=response.status_code,
+                response_time_ms=round(elapsed_ms, 2),
+                message="Login successful" if success else "Login failed",
+                details=_extract_success_details(response) if success else {
+                    "response_preview": response.text[:300],
+                },
             )
-        else:
-            response = client.post(
-                request.login_url,
-                data=payload,
-                headers=request.extra_headers or None,
-            )
-
-        elapsed_ms = response.elapsed.total_seconds() * 1000
-        success = 200 <= response.status_code < 300
-
-        body_text = response.text.lower()
-        if success and any(
-            marker in body_text
-            for marker in ("invalid", "incorrect", "failed", "error", "unauthorized")
-        ):
-            if response.status_code == 200:
-                success = False
-
-        result = CredentialResult(
-            username=username,
-            success=success,
-            status_code=response.status_code,
-            response_time_ms=round(elapsed_ms, 2),
-            message="Login successful" if success else "Login failed",
-            details=_extract_success_details(response) if success else {
-                "response_preview": response.text[:300],
-            },
-        )
-        return result
     except httpx.RequestError as exc:
         return CredentialResult(
             username=username,
             success=False,
             message=f"Request error: {exc}",
         )
+
+
+def _append_result(job: JobSummary, result: CredentialResult) -> None:
+    with _jobs_lock:
+        job.results.append(result)
+        if result.success:
+            job.success_count += 1
+        else:
+            job.failure_count += 1
 
 
 def run_login_job(job_id: str, request: TestLoginRequest) -> None:
@@ -155,37 +166,35 @@ def run_login_job(job_id: str, request: TestLoginRequest) -> None:
         validate_allowed_domain(request.login_url)
         job.total = len(pairs)
         job.login_url = request.login_url
+        job.results = []
+        job.success_count = 0
+        job.failure_count = 0
 
         limiter = RateLimiter(request.rate_limit_rps)
-        results: List[CredentialResult] = []
 
-        with httpx.Client(timeout=15.0, follow_redirects=True) as client:
-            with ThreadPoolExecutor(max_workers=request.max_workers) as executor:
-                futures = {
-                    executor.submit(
-                        _attempt_login, client, request, username, password, limiter
-                    ): username
-                    for username, password in pairs
-                }
-                for future in as_completed(futures):
-                    result = future.result()
-                    results.append(result)
-                    result_logger.write(
-                        job_id,
-                        {
-                            "username": result.username,
-                            "success": result.success,
-                            "status_code": result.status_code,
-                            "response_time_ms": result.response_time_ms,
-                            "message": result.message,
-                            "details": result.details,
-                        },
-                    )
+        with ThreadPoolExecutor(max_workers=request.max_workers) as executor:
+            futures = {
+                executor.submit(
+                    _attempt_login, request, username, password, limiter
+                ): username
+                for username, password in pairs
+            }
+            for future in as_completed(futures):
+                result = future.result()
+                _append_result(job, result)
+                result_logger.write(
+                    job_id,
+                    {
+                        "username": result.username,
+                        "success": result.success,
+                        "status_code": result.status_code,
+                        "response_time_ms": result.response_time_ms,
+                        "message": result.message,
+                        "details": result.details,
+                    },
+                )
 
-        results.sort(key=lambda item: item.username.lower())
-        job.results = results
-        job.success_count = sum(1 for item in results if item.success)
-        job.failure_count = job.total - job.success_count
+        job.results.sort(key=lambda item: item.username.lower())
         job.status = JobStatus.COMPLETED
     except Exception as exc:
         job.status = JobStatus.FAILED
