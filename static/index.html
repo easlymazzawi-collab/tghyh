@@ -96,6 +96,12 @@
       </div>
     </div>
 
+    <div class="card" style="margin-top:0.75rem">
+      <h2>Domain không mở được?</h2>
+      <p class="sub" style="margin-bottom:0.5rem">Thêm domain vào <code>config.json</code> rồi khởi động lại <code>start.bat</code>:</p>
+      <textarea id="configHint" readonly style="min-height:70px;font-size:0.8rem"></textarea>
+    </div>
+
     <div class="card" id="resultCard" style="display:none">
       <h2>Kết quả</h2>
       <div id="summary"></div>
@@ -225,6 +231,8 @@
     fetch("/api/config").then((r) => r.json()).then((cfg) => {
       $("urlInput").value = `${location.origin}/mock/login-page`;
       $("credList").value = "user1:pass111\nuser2:pass222\ndemo:demo2024";
+      const domains = (cfg.allowed_domains || []).map((d) => `    "${d}"`).join(",\n");
+      $("configHint").value = `{\n  "allowed_domains": [\n${domains},\n    "your-domain.com"\n  ]\n}`;
       navigate($("urlInput").value);
     });
   </script>

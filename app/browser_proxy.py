@@ -39,15 +39,21 @@ def rewrite_html(html: str, page_url: str, session_id: str) -> str:
             continue
         absolute = urljoin(page_url, href)
         if _is_navigable(absolute):
-            validate_allowed_domain(absolute)
-            tag["href"] = _proxy_link(absolute, session_id)
+            try:
+                validate_allowed_domain(absolute)
+                tag["href"] = _proxy_link(absolute, session_id)
+            except ValueError:
+                pass
 
     for tag in soup.find_all("form"):
         action = tag.get("action") or page_url
         absolute = urljoin(page_url, action)
         if _is_navigable(absolute):
-            validate_allowed_domain(absolute)
-            tag["action"] = _proxy_link(absolute, session_id)
+            try:
+                validate_allowed_domain(absolute)
+                tag["action"] = _proxy_link(absolute, session_id)
+            except ValueError:
+                pass
         if not tag.get("method"):
             tag["method"] = "post"
 

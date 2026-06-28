@@ -7,11 +7,11 @@ from urllib.parse import unquote
 
 import httpx
 from fastapi import FastAPI, Form, Header, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app.browser_proxy import rewrite_html
+from app.browser_proxy import resolve_real_url, rewrite_html
 from app.config import ROOT_DIR, app_config
 from app.validators import validate_allowed_domain
 from app.form_discovery import discover_forms_from_html
@@ -38,6 +38,36 @@ app = FastAPI(
 
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+def _browser_error_html(message: str, status_code: int = 403) -> HTMLResponse:
+    allowed = ", ".join(app_config.allowed_domains)
+    return HTMLResponse(
+        f"""<!DOCTYPE html>
+<html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
+<style>
+  body {{ font-family: Segoe UI, sans-serif; background:#1a1a2e; color:#eee;
+    padding:2rem; line-height:1.6; }}
+  .box {{ background:#16213e; border:1px solid #e94560; border-radius:8px; padding:1.5rem; max-width:520px; }}
+  code {{ background:#0f3460; padding:2px 6px; border-radius:4px; }}
+</style></head>
+<body><div class="box">
+  <h2>Không mở được trang</h2>
+  <p>{message}</p>
+  <p>Domain cho phép hiện tại: <code>{allowed}</code></p>
+  <p>Thêm domain của bạn vào file <code>config.json</code> rồi khởi động lại server.</p>
+</div></body></html>""",
+        status_code=status_code,
+    )
+
+
+@app.exception_handler(ValueError)
+async def value_error_handler(request: Request, exc: ValueError):
+    message = str(exc)
+    if request.url.path.startswith("/browser/"):
+        return _browser_error_html(message)
+    return JSONResponse(status_code=400, content={"detail": message})
+
 
 _browser_clients: Dict[str, httpx.Client] = {}
 _browser_page_url: Dict[str, str] = {}
@@ -89,15 +119,17 @@ def api_config() -> dict:
 
 @app.post("/api/browser/capture")
 def browser_capture(request: BrowserCaptureRequest) -> dict:
-    page_url = request.page_url or _browser_page_url.get(request.sid, "")
+    page_url = resolve_real_url(request.page_url or _browser_page_url.get(request.sid, ""))
+    action = resolve_real_url(request.action)
+
     if page_url:
         validate_allowed_domain(page_url)
-    validate_allowed_domain(request.action)
+    validate_allowed_domain(action)
 
     try:
         recipe = build_recipe_from_browser(
             page_url,
-            request.action,
+            action,
             request.method,
             request.fields,
         )
@@ -135,7 +167,13 @@ def browser_go_get(
     try:
         response = client.get(target)
     except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail=f"Không mở được trang: {exc}") from exc
+        return _browser_error_html(f"Không kết nối được: {exc}", status_code=502)
+
+    if response.status_code >= 400:
+        return _browser_error_html(
+            f"Trang trả về HTTP {response.status_code}",
+            status_code=502,
+        )
 
     content_type = response.headers.get("content-type", "")
     if "text/html" in content_type.lower():
@@ -172,7 +210,7 @@ async def browser_go_post(
     try:
         response = client.post(target, data=fields)
     except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail=f"Không gửi form: {exc}") from exc
+        return _browser_error_html(f"Không gửi form: {exc}", status_code=502)
 
     _browser_page_url[session_id] = str(response.url)
     content_type = response.headers.get("content-type", "")
