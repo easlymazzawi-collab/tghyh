@@ -1,1 +1,148 @@
-# tghyh
+# Login Tester
+
+Tool login đơn giản: **trình duyệt tích hợp** — nhập link, login 1 lần, chạy cho nhiều acc.
+
+## Windows — 2 bước
+
+```bat
+install.bat
+start.bat
+```
+
+Mở http://localhost:8080
+
+## Cách dùng (3 bước)
+
+1. Nhập link trang login → nhấn **Đi**
+2. **Login 1 tài khoản** trong khung trình duyệt (tool tự ghi)
+3. Nhập danh sách `user:pass` → **Chạy cho tất cả acc**
+
+Nhấn **Demo** để thử ngay với trang mẫu.
+
+## Tính năng
+
+- **Tự phát hiện form HTML** — quét trang login, tìm ô email/username/password và hidden fields (CSRF)
+- Hỗ trợ 3 chế độ: JSON API, Form API, **HTML form** (tự điền ô login)
+- Chạy nhiều luồng song song (cấu hình 1–10 workers)
+- Rate limit (request/giây) để tránh quá tải API
+- **Domain allowlist** — chỉ gọi tới domain trong `config.json`
+- Log chi tiết từng lần đăng nhập vào `logs/<job_id>.jsonl`
+- Mock login API sẵn có để demo trên `localhost`
+
+## Ghi lại & Chạy lại (login 1 lần)
+
+1. **Login mẫu** — nhập URL + `user:pass` tài khoản bạn vừa thử login
+2. Nhấn **Ghi lại cách login** → tool lưu recipe (URL, form, headers, CSRF…)
+3. Nhập danh sách acc → **Chạy y hệt cho tất cả acc**
+
+**Hoặc** copy lệnh cURL từ Chrome DevTools (F12 → Network → Copy as cURL) và dán vào ô cURL.
+
+## Cài đặt
+
+### Windows
+
+```bat
+install.bat
+start.bat
+```
+
+Hoặc thủ công:
+
+```bat
+python -m pip install -r requirements.txt
+python run.py
+```
+
+Nếu thiếu thư viện, chạy:
+
+```bat
+python run.py --install
+```
+
+### Linux / macOS
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+## Chạy
+
+```bash
+python run.py
+```
+
+Mở trình duyệt: **http://localhost:8080**
+
+Nhấn **Điền demo** để load URL mock và danh sách tài khoản mẫu.
+
+### Tài khoản demo (mock API)
+
+| Username | Password  |
+|----------|-----------|
+| admin    | admin123  |
+| user1    | pass111   |
+| user2    | pass222   |
+| demo     | demo2024  |
+
+## Cấu hình domain cho phép
+
+Sửa `config.json`:
+
+```json
+{
+  "allowed_domains": ["localhost", "127.0.0.1", "staging.yourdomain.com"],
+  "default_rate_limit_rps": 2,
+  "default_max_workers": 3,
+  "max_credentials_per_job": 100,
+  "log_dir": "logs"
+}
+```
+
+Chỉ URL thuộc các domain trên mới được phép test.
+
+## API
+
+| Method | Endpoint | Mô tả |
+|--------|----------|-------|
+| GET | `/` | Giao diện HTML |
+| GET | `/api/config` | Cấu hình hiện tại |
+| POST | `/api/jobs` | Bắt đầu job test login |
+| GET | `/api/jobs/{job_id}` | Trạng thái & kết quả |
+| POST | `/api/discover-form` | Tự phát hiện ô username/password trên trang HTML |
+| GET | `/mock/login-page` | Trang login HTML demo |
+
+### Ví dụ request
+
+```bash
+curl -X POST http://localhost:8080/api/jobs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "login_url": "http://localhost:8080/mock/login",
+    "credentials": "admin:admin123\nuser1:pass111",
+    "max_workers": 2,
+    "rate_limit_rps": 2
+  }'
+```
+
+## Kết quả khi đăng nhập thành công
+
+Mỗi tài khoản thành công trả về:
+
+- HTTP status & thời gian phản hồi (ms)
+- JSON response (token, user, message, …)
+- Cookie / Authorization header (nếu có)
+
+## Lưu ý bảo mật
+
+- Chỉ dùng trên hệ thống/API **do bạn sở hữu** hoặc có **ủy quyền pentest**
+- Không dùng để test credential trên dịch vụ bên thứ ba
+- Thêm domain production vào allowlist chỉ khi bạn kiểm soát server đó
+
+## Biến môi trường
+
+| Biến | Mặc định | Mô tả |
+|------|----------|-------|
+| `LOGIN_TESTER_HOST` | `0.0.0.0` | Host bind |
+| `LOGIN_TESTER_PORT` | `8080` | Port |

@@ -1,0 +1,6 @@
+logs/
+*.jsonl
+.venv/
+__pycache__/
+*.pyc
+config.json.bak
