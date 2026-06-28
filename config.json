@@ -1,7 +1,11 @@
 {
   "allowed_domains": [
     "localhost",
-    "127.0.0.1"
+    "127.0.0.1",
+    "panel.cloudzy.com",
+    "api.cloudzy.com",
+    "dash.cloudzy.com",
+    "cloudzy.com"
   ],
   "default_rate_limit_rps": 2.0,
   "default_max_workers": 3,

@@ -79,14 +79,87 @@ def _inject_navigation_guard(soup: BeautifulSoup, page_url: str, session_id: str
   var PROXY = {json.dumps(PROXY_PATH)};
   var SITE = {json.dumps(site_origin)};
 
+  function rootDomain(host) {{
+    var parts = (host || '').split('.');
+    if (parts.length <= 2) return host;
+    return parts.slice(-2).join('.');
+  }}
+
+  function shouldProxyUrl(u) {{
+    try {{
+      var site = new URL(SITE);
+      if (u.hostname === site.hostname) return true;
+      var siteRoot = rootDomain(site.hostname);
+      var urlRoot = rootDomain(u.hostname);
+      if (siteRoot && urlRoot && siteRoot === urlRoot) return true;
+    }} catch (e) {{}}
+    return false;
+  }}
+
   function proxyUrl(target) {{
     if (!target || String(target).charAt(0) === '#') return target;
     if (String(target).indexOf('javascript:') === 0) return target;
     try {{
       var u = new URL(target, SITE);
+      if (!shouldProxyUrl(u)) return target;
       if (u.pathname.indexOf(PROXY) === 0) return u.href;
       return PROXY + '?sid=' + encodeURIComponent(SID) + '&url=' + encodeURIComponent(u.href);
     }} catch (e) {{ return target; }}
+  }}
+
+  function wrapFetch() {{
+    if (!window.fetch) return;
+    var orig = window.fetch;
+    window.fetch = function(input, init) {{
+      try {{
+        var url = typeof input === 'string' ? input : (input && input.url);
+        var proxied = proxyUrl(url);
+        if (proxied && proxied !== url) {{
+          if (typeof input === 'string') return orig(proxied, init);
+          return orig(new Request(proxied, input), init);
+        }}
+      }} catch (e) {{}}
+      return orig(input, init);
+    }};
+  }}
+
+  function wrapXHR() {{
+    var open = XMLHttpRequest.prototype.open;
+    var send = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function(method, url) {{
+      this.__ltMethod = method;
+      this.__ltUrl = url;
+      var args = Array.prototype.slice.call(arguments);
+      args[1] = proxyUrl(url);
+      return open.apply(this, args);
+    }};
+    XMLHttpRequest.prototype.send = function(body) {{
+      try {{
+        var url = this.__ltUrl || '';
+        var method = (this.__ltMethod || 'GET').toUpperCase();
+        if (body && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {{
+          var fields = {{}};
+          try {{
+            if (typeof body === 'string' && body.charAt(0) === '{{') {{
+              fields = JSON.parse(body);
+            }}
+          }} catch (e) {{}}
+          var hasPass = Object.keys(fields).some(function(k) {{
+            return /pass|pwd/i.test(k);
+          }});
+          if (hasPass) {{
+            window.parent.postMessage({{
+              type: 'browser-api-login-captured',
+              action: proxyUrl(url) || url,
+              method: method,
+              fields: fields,
+              pageUrl: window.location.href
+            }}, '*');
+          }}
+        }}
+      }} catch (e) {{}}
+      return send.apply(this, arguments);
+    }};
   }}
 
   function wrapHistory() {{
@@ -127,6 +200,8 @@ def _inject_navigation_guard(soup: BeautifulSoup, page_url: str, session_id: str
   }} catch (e) {{}}
 
   wrapHistory();
+  wrapFetch();
+  wrapXHR();
 }})();
 """
     head = soup.find("head")
@@ -210,6 +285,29 @@ def rewrite_html(html: str, page_url: str, session_id: str) -> str:
 
     recorder = soup.new_tag("script")
     recorder.string = """
+    function notifyApiLogin(url, method, body) {
+      try {
+        if (!body) return;
+        var fields = {};
+        if (typeof body === 'string' && body.charAt(0) === '{') {
+          fields = JSON.parse(body);
+        } else if (body instanceof FormData) {
+          body.forEach(function(v, k) { fields[k] = v; });
+        }
+        var hasPass = Object.keys(fields).some(function(k) {
+          return /pass|pwd/i.test(k);
+        });
+        if (!hasPass) return;
+        window.parent.postMessage({
+          type: 'browser-api-login-captured',
+          action: url,
+          method: (method || 'POST').toUpperCase(),
+          fields: fields,
+          pageUrl: window.location.href
+        }, '*');
+      } catch (err) {}
+    }
+
     window.addEventListener('submit', function(e) {
       try {
         const form = e.target;

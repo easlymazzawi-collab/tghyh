@@ -13,7 +13,16 @@ CONFIG_PATH = ROOT_DIR / "config.json"
 
 
 class AppConfig(BaseModel):
-    allowed_domains: List[str] = Field(default_factory=lambda: ["localhost", "127.0.0.1"])
+    allowed_domains: List[str] = Field(
+        default_factory=lambda: [
+            "localhost",
+            "127.0.0.1",
+            "panel.cloudzy.com",
+            "api.cloudzy.com",
+            "dash.cloudzy.com",
+            "cloudzy.com",
+        ]
+    )
     default_rate_limit_rps: float = 2.0
     default_max_workers: int = 3
     max_credentials_per_job: int = 100

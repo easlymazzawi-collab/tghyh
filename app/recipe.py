@@ -102,6 +102,67 @@ def _template_body(
     return template
 
 
+def build_recipe_from_api_json(
+    login_page_url: str,
+    action_url: str,
+    method: str,
+    fields: Dict[str, str],
+    headers: Optional[Dict[str, str]] = None,
+) -> LoginRecipe:
+    from app.browser_proxy import resolve_real_url
+
+    login_page_url = resolve_real_url(login_page_url)
+    action_url = resolve_real_url(action_url)
+    username_field, password_field = _guess_credential_fields(fields, "", "")
+    sample_username = fields.get(username_field, "")
+    sample_password = fields.get(password_field, "")
+
+    body_template = _template_body(
+        fields,
+        username_field,
+        password_field,
+        sample_username,
+        sample_password,
+    )
+
+    steps = []
+    if login_page_url.strip():
+        steps.append(
+            RecipeStep(
+                method="GET",
+                url=login_page_url,
+                purpose="load_login_page",
+            )
+        )
+    steps.append(
+        RecipeStep(
+            method=method.upper(),
+            url=action_url,
+            purpose="submit_login",
+            content_type="application/json",
+            body_template=body_template,
+            use_json=True,
+        )
+    )
+
+    return LoginRecipe(
+        name="browser-api-recipe",
+        sample_username=sample_username,
+        payload_mode=LoginPayloadMode.JSON,
+        login_page_url=login_page_url,
+        login_url=action_url,
+        username_field=username_field,
+        password_field=password_field,
+        headers=dict(headers or {}),
+        hidden_fields={
+            k: v
+            for k, v in fields.items()
+            if k not in {username_field, password_field}
+        },
+        steps=steps,
+    )
+
+
 def build_recipe_from_browser(
     login_page_url: str,
     action_url: str,

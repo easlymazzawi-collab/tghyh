@@ -11,6 +11,16 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from app.browser_forward import (
+    extract_json_fields,
+    forward_request_headers,
+    is_html_response,
+    is_json_request,
+    login_capture_headers,
+    looks_like_login_payload,
+    request_content_type,
+    response_headers_to_forward,
+)
 from app.browser_proxy import resolve_real_url, rewrite_html
 from app.config import ROOT_DIR, app_config
 from app.validators import validate_allowed_domain
@@ -25,7 +35,7 @@ from app.models import (
     ReplayJobRequest,
     TestLoginRequest,
 )
-from app.recipe import LoginRecipe, build_recipe_from_browser
+from app.recipe import LoginRecipe, build_recipe_from_api_json, build_recipe_from_browser
 from app.replay_worker import create_replay_job, record_login, run_replay_job, save_recipe
 
 STATIC_DIR = ROOT_DIR / "static"
@@ -86,6 +96,8 @@ class BrowserCaptureRequest(BaseModel):
     method: str = "POST"
     fields: Dict[str, str] = Field(default_factory=dict)
     page_url: str = ""
+    headers: Dict[str, str] = Field(default_factory=dict)
+    is_json: bool = False
 
 
 class MockLoginRequest(BaseModel):
@@ -127,12 +139,21 @@ def browser_capture(request: BrowserCaptureRequest) -> dict:
     validate_allowed_domain(action)
 
     try:
-        recipe = build_recipe_from_browser(
-            page_url,
-            action,
-            request.method,
-            request.fields,
-        )
+        if request.is_json:
+            recipe = build_recipe_from_api_json(
+                page_url,
+                action,
+                request.method,
+                request.fields,
+                request.headers,
+            )
+        else:
+            recipe = build_recipe_from_browser(
+                page_url,
+                action,
+                request.method,
+                request.fields,
+            )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -145,16 +166,71 @@ def browser_capture(request: BrowserCaptureRequest) -> dict:
     }
 
 
-@app.get("/api/browser/recipe")
-def browser_recipe(sid: str) -> dict:
-    recipe = _browser_recipes.get(sid)
-    if not recipe:
-        return {"recorded": False}
-    return {"recorded": True, "recipe": recipe.model_dump()}
+def _maybe_capture_login_recipe(
+    session_id: str,
+    target: str,
+    method: str,
+    body: bytes,
+    content_type: str,
+    request: Request,
+) -> None:
+    login_page = _browser_page_url.get(session_id, target)
+    fields: Dict[str, str] = {}
+
+    if is_json_request(content_type):
+        fields = extract_json_fields(body)
+    elif body:
+        from urllib.parse import parse_qs
+
+        try:
+            parsed = parse_qs(body.decode("utf-8"), keep_blank_values=True)
+            fields = {k: v[0] for k, v in parsed.items()}
+        except UnicodeDecodeError:
+            fields = {}
+
+    if not looks_like_login_payload(fields):
+        return
+
+    headers = login_capture_headers(request)
+    try:
+        if is_json_request(content_type):
+            recipe = build_recipe_from_api_json(
+                login_page,
+                target,
+                method,
+                fields,
+                headers,
+            )
+        else:
+            recipe = build_recipe_from_browser(login_page, target, method, fields)
+        _browser_recipes[session_id] = save_recipe(recipe)
+    except ValueError:
+        pass
 
 
-@app.get("/browser/go", response_model=None)
-def browser_go_get(
+def _proxy_upstream_response(
+    response: httpx.Response,
+    target: str,
+    session_id: str,
+) -> Response:
+    content_type = response.headers.get("content-type", "")
+    headers = response_headers_to_forward(response)
+
+    if is_html_response(content_type):
+        html = rewrite_html(response.text, str(response.url) or target, session_id)
+        return HTMLResponse(html, status_code=response.status_code, headers=headers)
+
+    return Response(
+        content=response.content,
+        status_code=response.status_code,
+        media_type=content_type.split(";")[0] or "application/octet-stream",
+        headers=headers,
+    )
+
+
+@app.api_route("/browser/go", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
+async def browser_go(
+    request: Request,
     url: str = Query(...),
     sid: str = Query(default=""),
 ):
@@ -164,64 +240,51 @@ def browser_go_get(
     client = _browser_client(session_id)
     _browser_page_url[session_id] = target
 
-    try:
-        response = client.get(target)
-    except httpx.HTTPError as exc:
-        return _browser_error_html(f"Không kết nối được: {exc}", status_code=502)
-
-    if response.status_code >= 400:
-        return _browser_error_html(
-            f"Trang trả về HTTP {response.status_code}",
-            status_code=502,
+    if request.method == "OPTIONS":
+        return Response(
+            status_code=204,
+            headers={
+                "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": request.headers.get(
+                    "access-control-request-headers", "*"
+                ),
+            },
         )
 
-    content_type = response.headers.get("content-type", "")
-    if "text/html" in content_type.lower():
-        html = rewrite_html(response.text, str(response.url), session_id)
-        return HTMLResponse(html)
+    body = await request.body()
+    content_type = request_content_type(request)
+    forward_headers = forward_request_headers(request)
 
-    return Response(
-        content=response.content,
-        media_type=content_type.split(";")[0] or "application/octet-stream",
-    )
+    if body:
+        forward_headers["Content-Type"] = content_type or "application/octet-stream"
 
-
-@app.post("/browser/go", response_model=None)
-async def browser_go_post(
-    request: Request,
-    url: str = Query(...),
-    sid: str = Query(default=""),
-):
-    target = unquote(url)
-    session_id = sid or str(uuid.uuid4())
-    validate_allowed_domain(target)
-    client = _browser_client(session_id)
-    form = await request.form()
-    fields = {key: str(value) for key, value in form.items()}
-
-    login_page = _browser_page_url.get(session_id, target)
-    if any("pass" in key.lower() for key in fields):
-        try:
-            recipe = build_recipe_from_browser(login_page, target, "POST", fields)
-            _browser_recipes[session_id] = save_recipe(recipe)
-        except ValueError:
-            pass
+    _maybe_capture_login_recipe(session_id, target, request.method, body, content_type, request)
 
     try:
-        response = client.post(target, data=fields)
+        response = client.request(
+            request.method,
+            target,
+            content=body or None,
+            headers=forward_headers or None,
+        )
     except httpx.HTTPError as exc:
-        return _browser_error_html(f"Không gửi form: {exc}", status_code=502)
+        if is_json_request(content_type) or "/api/" in target or "/auth/" in target:
+            return JSONResponse(
+                status_code=502,
+                content={"detail": f"Proxy error: {exc}"},
+            )
+        return _browser_error_html(f"Không kết nối được: {exc}", status_code=502)
 
     _browser_page_url[session_id] = str(response.url)
-    content_type = response.headers.get("content-type", "")
-    if "text/html" in content_type.lower():
-        html = rewrite_html(response.text, str(response.url), session_id)
-        return HTMLResponse(html)
+    return _proxy_upstream_response(response, target, session_id)
 
-    return Response(
-        content=response.content,
-        media_type=content_type.split(";")[0] or "application/octet-stream",
-    )
+
+@app.get("/api/browser/recipe")
+def browser_recipe(sid: str) -> dict:
+    recipe = _browser_recipes.get(sid)
+    if not recipe:
+        return {"recorded": False}
+    return {"recorded": True, "recipe": recipe.model_dump()}
 
 
 @app.post("/api/record-login", response_model=RecordLoginResponse)

@@ -126,8 +126,8 @@
         <div class="frame-loading show" id="frameLoading">Đang tải trang...</div>
         <div class="frame-overlay" id="frameOverlay">
           <strong id="overlayTitle">Trang không hiển thị được</strong>
-          <p id="overlayText">Site dạng Vue/React (như Cloudzy) + reCAPTCHA không chạy trong khung embed.<br>
-          Dùng <strong>Chế độ cURL</strong> bên dưới ↓</p>
+          <p id="overlayText">Site Vue/React (Cloudzy…) cần thêm vài giây để render form.<br>
+          Nếu không hiện: <strong>Tải lại</strong> hoặc dùng <strong>Chế độ cURL</strong> ↓</p>
           <button type="button" class="btn" id="openChromeBtn" style="margin-top:0.75rem;flex:none">Mở bằng Chrome</button>
           <button type="button" class="btn secondary" id="retryBtn" style="margin-top:0.5rem;flex:none">Tải lại</button>
         </div>
@@ -197,8 +197,18 @@
     }
 
     $("browserFrame").addEventListener("load", () => {
-      setTimeout(checkFrameContent, 2000);
+      $("frameOverlay").classList.remove("show");
+      $("frameLoading").classList.add("show");
+      scheduleFrameChecks();
     });
+
+    let frameCheckTimer = null;
+    function scheduleFrameChecks() {
+      if (frameCheckTimer) clearTimeout(frameCheckTimer);
+      [2500, 5000, 8000].forEach((delay) => {
+        setTimeout(checkFrameContent, delay);
+      });
+    }
 
     function navigate(url) {
       hideError();
@@ -212,42 +222,45 @@
 
     function showSpaOverlay(url) {
       $("frameLoading").classList.remove("show");
-      $("overlayTitle").textContent = "Cloudzy / Vue SPA — không dùng được khung embed";
+      $("overlayTitle").textContent = "Vue/React đang tải chậm hoặc cần reCAPTCHA";
       $("overlayText").innerHTML =
-        "Trang này cần JavaScript + reCAPTCHA trên domain thật.<br>" +
-        "Tool đã tải HTML (200 OK) nhưng form login không render trong iframe.<br>" +
-        "<strong>Dùng 「Chế độ cURL」 bên dưới</strong> — hoặc nhấn 「Mở bằng Chrome」.";
+        "Nếu form chưa hiện sau vài giây, thử <strong>Tải lại</strong> hoặc <strong>Mở bằng Chrome</strong>.<br>" +
+        "Vẫn có thể dùng <strong>Chế độ cURL</strong> bên dưới.";
       $("frameOverlay").classList.add("show");
       $("urlInput").dataset.external = url;
     }
 
     function checkFrameContent() {
-      $("frameLoading").classList.remove("show");
       try {
         const doc = $("browserFrame").contentDocument;
         if (!doc) return;
         const body = doc.body;
-        if (!body) {
-          $("frameOverlay").classList.add("show");
-          return;
-        }
-        const app = doc.querySelector("#app");
-        const isVueSpa = app && !app.querySelector("input,form,button") &&
-          [...doc.scripts].some((s) => s.src && (s.src.includes("/js/app") || s.src.includes("chunk-vendors")));
-        const isRecaptcha = body.innerHTML.includes("recaptcha");
-        if (isVueSpa || isRecaptcha) {
-          showSpaOverlay($("urlInput").value);
-          return;
-        }
+        if (!body) return;
+
+        const hasInput = body.querySelector("input, form, button[type=submit], button.v-btn");
         const text = (body.innerText || "").trim();
-        const hasInput = body.querySelector("input, form, button, img, svg, canvas, table");
+        if (hasInput || text.length > 20) {
+          $("frameLoading").classList.remove("show");
+          $("frameOverlay").classList.remove("show");
+          return;
+        }
+
+        const app = doc.querySelector("#app");
+        const isVueSpa = app && [...doc.scripts].some((s) =>
+          s.src && (s.src.includes("/js/app") || s.src.includes("chunk-vendors"))
+        );
+        if (isVueSpa && !hasInput) {
+          return;
+        }
+
+        $("frameLoading").classList.remove("show");
         if (text.length < 3 && !hasInput) {
           $("overlayTitle").textContent = "Trang trắng";
-          $("overlayText").innerHTML = "Không thấy nội dung. Thử <strong>Demo</strong> hoặc <strong>Chế độ cURL</strong>.";
+          $("overlayText").innerHTML = "Không thấy nội dung. Thử <strong>Tải lại</strong> hoặc <strong>Chế độ cURL</strong>.";
           $("frameOverlay").classList.add("show");
         }
       } catch (e) {
-        /* ignore */
+        $("frameLoading").classList.remove("show");
       }
     }
 
@@ -314,7 +327,7 @@
       $("runBtn").disabled = false;
     }
 
-    async function captureFromBrowser(data) {
+    async function captureFromBrowser(data, isJson) {
       try {
         const res = await fetch("/api/browser/capture", {
           method: "POST",
@@ -325,6 +338,7 @@
             method: data.method,
             fields: data.fields,
             page_url: data.pageUrl,
+            is_json: !!isJson,
           }),
         });
         const json = await res.json();
@@ -338,7 +352,10 @@
 
     window.addEventListener("message", (event) => {
       if (event.data?.type === "browser-login-captured") {
-        captureFromBrowser(event.data);
+        captureFromBrowser(event.data, false);
+      }
+      if (event.data?.type === "browser-api-login-captured") {
+        captureFromBrowser(event.data, true);
       }
     });
 
