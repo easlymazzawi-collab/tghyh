@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import threading
+import uuid
+from typing import Dict
+from urllib.parse import unquote
 
 import httpx
-from fastapi import FastAPI, Form, Header, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi import FastAPI, Form, Header, HTTPException, Query, Request
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from app.browser_proxy import rewrite_html
 from app.config import ROOT_DIR, app_config
 from app.validators import validate_allowed_domain
 from app.form_discovery import discover_forms_from_html
@@ -21,7 +25,8 @@ from app.models import (
     ReplayJobRequest,
     TestLoginRequest,
 )
-from app.replay_worker import create_replay_job, record_login, run_replay_job
+from app.recipe import LoginRecipe, build_recipe_from_browser
+from app.replay_worker import create_replay_job, record_login, run_replay_job, save_recipe
 
 STATIC_DIR = ROOT_DIR / "static"
 
@@ -33,6 +38,24 @@ app = FastAPI(
 
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+_browser_clients: Dict[str, httpx.Client] = {}
+_browser_page_url: Dict[str, str] = {}
+_browser_recipes: Dict[str, LoginRecipe] = {}
+
+
+def _browser_client(session_id: str) -> httpx.Client:
+    if session_id not in _browser_clients:
+        _browser_clients[session_id] = httpx.Client(timeout=20.0, follow_redirects=True)
+    return _browser_clients[session_id]
+
+
+class BrowserCaptureRequest(BaseModel):
+    sid: str
+    action: str
+    method: str = "POST"
+    fields: Dict[str, str] = Field(default_factory=dict)
+    page_url: str = ""
 
 
 class MockLoginRequest(BaseModel):
@@ -60,7 +83,107 @@ def api_config() -> dict:
         "default_rate_limit_rps": app_config.default_rate_limit_rps,
         "default_max_workers": app_config.default_max_workers,
         "max_credentials_per_job": app_config.max_credentials_per_job,
+        "demo_login_url": "http://127.0.0.1:8080/mock/login-page",
     }
+
+
+@app.post("/api/browser/capture")
+def browser_capture(request: BrowserCaptureRequest) -> dict:
+    page_url = request.page_url or _browser_page_url.get(request.sid, "")
+    if page_url:
+        validate_allowed_domain(page_url)
+    validate_allowed_domain(request.action)
+
+    try:
+        recipe = build_recipe_from_browser(
+            page_url,
+            request.action,
+            request.method,
+            request.fields,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    saved = save_recipe(recipe)
+    _browser_recipes[request.sid] = saved
+    return {
+        "ok": True,
+        "message": "Đã ghi lại cách login!",
+        "recipe": saved.model_dump(),
+    }
+
+
+@app.get("/api/browser/recipe")
+def browser_recipe(sid: str) -> dict:
+    recipe = _browser_recipes.get(sid)
+    if not recipe:
+        return {"recorded": False}
+    return {"recorded": True, "recipe": recipe.model_dump()}
+
+
+@app.get("/browser/go", response_model=None)
+def browser_go_get(
+    url: str = Query(...),
+    sid: str = Query(default=""),
+):
+    target = unquote(url)
+    session_id = sid or str(uuid.uuid4())
+    validate_allowed_domain(target)
+    client = _browser_client(session_id)
+    _browser_page_url[session_id] = target
+
+    try:
+        response = client.get(target)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Không mở được trang: {exc}") from exc
+
+    content_type = response.headers.get("content-type", "")
+    if "text/html" in content_type.lower():
+        html = rewrite_html(response.text, str(response.url), session_id)
+        return HTMLResponse(html)
+
+    return Response(
+        content=response.content,
+        media_type=content_type.split(";")[0] or "application/octet-stream",
+    )
+
+
+@app.post("/browser/go", response_model=None)
+async def browser_go_post(
+    request: Request,
+    url: str = Query(...),
+    sid: str = Query(default=""),
+):
+    target = unquote(url)
+    session_id = sid or str(uuid.uuid4())
+    validate_allowed_domain(target)
+    client = _browser_client(session_id)
+    form = await request.form()
+    fields = {key: str(value) for key, value in form.items()}
+
+    login_page = _browser_page_url.get(session_id, target)
+    if any("pass" in key.lower() for key in fields):
+        try:
+            recipe = build_recipe_from_browser(login_page, target, "POST", fields)
+            _browser_recipes[session_id] = save_recipe(recipe)
+        except ValueError:
+            pass
+
+    try:
+        response = client.post(target, data=fields)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Không gửi form: {exc}") from exc
+
+    _browser_page_url[session_id] = str(response.url)
+    content_type = response.headers.get("content-type", "")
+    if "text/html" in content_type.lower():
+        html = rewrite_html(response.text, str(response.url), session_id)
+        return HTMLResponse(html)
+
+    return Response(
+        content=response.content,
+        media_type=content_type.split(";")[0] or "application/octet-stream",
+    )
 
 
 @app.post("/api/record-login", response_model=RecordLoginResponse)

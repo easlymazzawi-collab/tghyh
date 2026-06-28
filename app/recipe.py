@@ -102,6 +102,66 @@ def _template_body(
     return template
 
 
+def build_recipe_from_browser(
+    login_page_url: str,
+    action_url: str,
+    method: str,
+    fields: Dict[str, str],
+) -> LoginRecipe:
+    from app.browser_proxy import extract_form_fields, resolve_real_url
+
+    login_page_url = resolve_real_url(login_page_url)
+    action_url = resolve_real_url(action_url)
+
+    username_field, password_field, normalized = extract_form_fields(fields)
+    sample_username = normalized.get(username_field, "")
+    sample_password = normalized.get(password_field, "")
+
+    body_template = _template_body(
+        normalized,
+        username_field,
+        password_field,
+        sample_username,
+        sample_password,
+    )
+
+    steps = []
+    if login_page_url.strip():
+        steps.append(
+            RecipeStep(
+                method="GET",
+                url=login_page_url,
+                purpose="load_login_page",
+            )
+        )
+    steps.append(
+        RecipeStep(
+            method=method.upper(),
+            url=action_url,
+            purpose="submit_login",
+            content_type="application/x-www-form-urlencoded",
+            body_template=body_template,
+            use_json=False,
+        )
+    )
+
+    return LoginRecipe(
+        name="browser-recipe",
+        sample_username=sample_username,
+        payload_mode=LoginPayloadMode.HTML_FORM,
+        login_page_url=login_page_url,
+        login_url=action_url,
+        username_field=username_field,
+        password_field=password_field,
+        hidden_fields={
+            k: v
+            for k, v in normalized.items()
+            if k not in {username_field, password_field}
+        },
+        steps=steps,
+    )
+
+
 def build_recipe_from_request(
     request: TestLoginRequest,
     username: str,

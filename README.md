@@ -1,6 +1,23 @@
 # Login Tester
 
-Tool test đăng nhập qua **API chính thức** trên domain bạn kiểm soát. Gồm giao diện HTML, backend đa luồng, rate limit và ghi log kết quả.
+Tool login đơn giản: **trình duyệt tích hợp** — nhập link, login 1 lần, chạy cho nhiều acc.
+
+## Windows — 2 bước
+
+```bat
+install.bat
+start.bat
+```
+
+Mở http://localhost:8080
+
+## Cách dùng (3 bước)
+
+1. Nhập link trang login → nhấn **Đi**
+2. **Login 1 tài khoản** trong khung trình duyệt (tool tự ghi)
+3. Nhập danh sách `user:pass` → **Chạy cho tất cả acc**
+
+Nhấn **Demo** để thử ngay với trang mẫu.
 
 ## Tính năng
 

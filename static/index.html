@@ -3,850 +3,230 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Login Tester — API chính thức</title>
+  <title>Login Tester</title>
   <style>
     :root {
       --bg: #0f1419;
       --surface: #1a2332;
-      --surface-2: #243044;
       --border: #2d3f5c;
       --text: #e8edf5;
       --muted: #8b9cb8;
       --accent: #3b82f6;
-      --accent-hover: #2563eb;
       --success: #22c55e;
       --danger: #ef4444;
-      --warning: #f59e0b;
-      --radius: 10px;
-      --font: "Segoe UI", system-ui, -apple-system, sans-serif;
     }
-
     * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      font-family: var(--font);
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      line-height: 1.5;
+    body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    .wrap { max-width: 1000px; margin: 0 auto; padding: 1.25rem; }
+    h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
+    .sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 1rem; }
+    .browser-bar {
+      display: flex; gap: 0.5rem; background: var(--surface);
+      border: 1px solid var(--border); border-radius: 10px 10px 0 0; padding: 0.6rem;
     }
-
-    .container {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 2rem 1.25rem 4rem;
+    .browser-bar input {
+      flex: 1; background: #0f1419; border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); padding: 0.55rem 0.75rem; font-size: 0.9rem;
     }
-
-    header {
-      margin-bottom: 2rem;
+    .browser-bar button, .btn {
+      background: var(--accent); color: #fff; border: none; border-radius: 6px;
+      padding: 0.55rem 1rem; font-weight: 600; cursor: pointer;
     }
-
-    header h1 {
-      font-size: 1.75rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
+    .browser-bar button:disabled, .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn.secondary { background: #243044; border: 1px solid var(--border); }
+    #browserFrame {
+      width: 100%; height: 420px; border: 1px solid var(--border);
+      border-top: none; border-radius: 0 0 10px 10px; background: #fff;
     }
-
-    header p {
-      color: var(--muted);
-      margin-top: 0.35rem;
-      font-size: 0.95rem;
-    }
-
-    .badge-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      margin-top: 1rem;
-    }
-
-    .badge {
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      padding: 0.25rem 0.75rem;
-      font-size: 0.8rem;
-      color: var(--muted);
-    }
-
-    .badge strong { color: var(--warning); }
-
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1.25rem;
-    }
-
-    @media (max-width: 860px) {
-      .grid { grid-template-columns: 1fr; }
-    }
-
     .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 1.25rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 1rem; margin-top: 1rem;
     }
-
-    .card h2 {
-      font-size: 1rem;
-      margin-bottom: 1rem;
-      color: var(--text);
-    }
-
-    label {
-      display: block;
-      font-size: 0.85rem;
-      color: var(--muted);
-      margin-bottom: 0.35rem;
-    }
-
-    input, textarea, select {
-      width: 100%;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      padding: 0.6rem 0.75rem;
-      font-size: 0.9rem;
-      font-family: inherit;
-      margin-bottom: 0.9rem;
-    }
-
+    .card h2 { font-size: 0.95rem; margin-bottom: 0.75rem; }
+    label { display: block; font-size: 0.82rem; color: var(--muted); margin-bottom: 0.3rem; }
     textarea {
-      min-height: 180px;
-      resize: vertical;
-      font-family: "Cascadia Code", "Fira Code", monospace;
-      font-size: 0.85rem;
+      width: 100%; min-height: 110px; background: #0f1419; border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); padding: 0.6rem; font-family: monospace; font-size: 0.85rem;
     }
-
-    input:focus, textarea:focus, select:focus {
-      outline: none;
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+    .status {
+      margin: 0.75rem 0; padding: 0.65rem 0.85rem; border-radius: 8px; font-size: 0.88rem;
+      background: #243044; border: 1px solid var(--border);
     }
-
-    .row-2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.75rem;
+    .status.ok { border-color: var(--success); color: #86efac; }
+    .status.wait { color: var(--muted); }
+    .error { display: none; background: rgba(239,68,68,.12); border: 1px solid #ef4444; color: #fca5a5;
+      padding: 0.75rem; border-radius: 8px; margin-bottom: 0.75rem; }
+    .error.show { display: block; }
+    .steps { color: var(--muted); font-size: 0.85rem; margin-bottom: 1rem; line-height: 1.7; }
+    .result-item {
+      border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; margin-top: 0.5rem; font-size: 0.85rem;
     }
-
-    .actions {
-      display: flex;
-      gap: 0.75rem;
-      margin-top: 0.25rem;
-    }
-
-    button {
-      border: none;
-      border-radius: 8px;
-      padding: 0.65rem 1.25rem;
-      font-size: 0.9rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-
-    .btn-primary {
-      background: var(--accent);
-      color: white;
-      flex: 1;
-    }
-
-    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
-    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    .btn-secondary {
-      background: var(--surface-2);
-      color: var(--text);
-      border: 1px solid var(--border);
-    }
-
-    .btn-secondary:hover { background: var(--border); }
-
-    .status-bar {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      margin: 1.25rem 0;
-      padding: 0.85rem 1rem;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      font-size: 0.9rem;
-    }
-
-    .status-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: var(--muted);
-      flex-shrink: 0;
-    }
-
-    .status-dot.running { background: var(--warning); animation: pulse 1s infinite; }
-    .status-dot.completed { background: var(--success); }
-    .status-dot.failed { background: var(--danger); }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
-
-    .stats {
-      display: flex;
-      gap: 1.5rem;
-      margin-left: auto;
-      font-size: 0.85rem;
-      color: var(--muted);
-    }
-
-    .stats span.success { color: var(--success); }
-    .stats span.fail { color: var(--danger); }
-
-    .results-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.85rem;
-    }
-
-    .results-table th {
-      text-align: left;
-      padding: 0.6rem 0.75rem;
-      color: var(--muted);
-      border-bottom: 1px solid var(--border);
-      font-weight: 500;
-    }
-
-    .results-table td {
-      padding: 0.65rem 0.75rem;
-      border-bottom: 1px solid var(--border);
-      vertical-align: top;
-    }
-
-    .results-table tr:hover td {
-      background: rgba(255, 255, 255, 0.02);
-    }
-
-    .pill {
-      display: inline-block;
-      padding: 0.15rem 0.55rem;
-      border-radius: 999px;
-      font-size: 0.75rem;
-      font-weight: 600;
-    }
-
-    .pill.ok { background: rgba(34, 197, 94, 0.15); color: var(--success); }
-    .pill.err { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
-
-    .details-box {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 0.5rem 0.65rem;
-      font-family: monospace;
-      font-size: 0.75rem;
-      max-height: 120px;
-      overflow: auto;
-      white-space: pre-wrap;
-      word-break: break-all;
-      color: var(--muted);
-    }
-
-    .hint {
-      font-size: 0.8rem;
-      color: var(--muted);
-      margin-top: -0.5rem;
-      margin-bottom: 0.9rem;
-    }
-
-    .error-banner {
-      background: rgba(239, 68, 68, 0.1);
-      border: 1px solid rgba(239, 68, 68, 0.3);
-      color: #fca5a5;
-      padding: 0.75rem 1rem;
-      border-radius: 8px;
-      margin-bottom: 1rem;
-      font-size: 0.9rem;
-      display: none;
-    }
-
-    .error-banner.visible { display: block; }
-
-    .empty-state {
-      text-align: center;
-      color: var(--muted);
-      padding: 2.5rem 1rem;
-      font-size: 0.9rem;
-    }
-
-    .screen-grid {
-      display: grid;
-      gap: 1rem;
-    }
-
-    .screen-card {
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 1rem;
-      background: var(--bg);
-    }
-
-    .screen-card h3 {
-      font-size: 0.95rem;
-      margin-bottom: 0.75rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .screen-form {
-      display: grid;
-      grid-template-columns: 140px 1fr;
-      gap: 0.35rem 0.75rem;
-      font-size: 0.82rem;
-    }
-
-    .screen-form dt {
-      color: var(--muted);
-      font-weight: 500;
-    }
-
-    .screen-form dd {
-      margin: 0;
-      word-break: break-word;
-    }
-
-    .section-title {
-      font-size: 0.9rem;
-      color: var(--muted);
-      margin: 1rem 0 0.75rem;
-      font-weight: 600;
-    }
+    .pill { font-size: 0.72rem; padding: 0.1rem 0.45rem; border-radius: 999px; font-weight: 700; }
+    .pill.ok { background: rgba(34,197,94,.15); color: var(--success); }
+    .pill.err { background: rgba(239,68,68,.15); color: var(--danger); }
   </style>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>Login Tester</h1>
-      <p>Ghi lại login 1 lần → tool chạy y hệt cho nhiều tài khoản. Chỉ domain được phép.</p>
-      <div class="badge-row" id="allowedDomains"></div>
-    </header>
+  <div class="wrap">
+    <h1>Login Tester</h1>
+    <p class="sub">Nhập link → login trong khung bên dưới → tool tự ghi → chạy cho nhiều acc.</p>
 
-    <div class="error-banner" id="errorBanner"></div>
+    <div class="error" id="error"></div>
 
-    <div class="card" style="margin-bottom:1.25rem;border-color:#3b82f6">
-      <h2>① Ghi lại login lần đầu → ② Chạy y hệt</h2>
-      <p class="hint" style="margin-bottom:1rem">
-        Cách 1: Nhập URL + tài khoản mẫu (acc bạn vừa login thử).<br>
-        Cách 2: Login trên Chrome → F12 → Network → chuột phải request → <strong>Copy as cURL</strong> → dán bên dưới.
-      </p>
+    <p class="steps">
+      <strong>1.</strong> Nhập link trang login → <strong>Đi</strong><br>
+      <strong>2.</strong> Login bằng 1 tài khoản mẫu trong khung trình duyệt<br>
+      <strong>3.</strong> Nhập danh sách acc → <strong>Chạy cho tất cả</strong>
+    </p>
 
-      <label for="sampleCred">Tài khoản mẫu (1 dòng user:pass)</label>
-      <input type="text" id="sampleCred" placeholder="admin:admin123" />
+    <div class="browser-bar">
+      <input type="url" id="urlInput" placeholder="http://localhost:8080/mock/login-page" />
+      <button type="button" id="goBtn">Đi</button>
+      <button type="button" class="secondary" id="demoBtn" style="background:#243044;border:1px solid var(--border)">Demo</button>
+    </div>
+    <iframe id="browserFrame" title="Trình duyệt"></iframe>
 
-      <label for="curlInput">Hoặc dán lệnh cURL (Copy as cURL từ DevTools)</label>
-      <textarea id="curlInput" style="min-height:90px" placeholder="curl 'http://localhost:8080/mock/login' -H 'Content-Type: application/json' --data-raw '{&quot;username&quot;:&quot;admin&quot;,&quot;password&quot;:&quot;admin123&quot;}'"></textarea>
+    <div class="status wait" id="recordStatus">Chưa ghi login — hãy đăng nhập 1 lần trong khung trên.</div>
 
-      <div class="actions">
-        <button class="btn-primary" type="button" id="recordBtn">Ghi lại cách login</button>
-        <button class="btn-secondary" type="button" id="recordDemoBtn">Demo ghi lại</button>
-      </div>
-      <p class="hint" id="recordStatus" style="margin-top:0.5rem"></p>
-
-      <label for="recipeJson">Recipe đã ghi (tool sẽ chạy y như vậy)</label>
-      <textarea id="recipeJson" style="min-height:120px" readonly placeholder="Nhấn 'Ghi lại cách login' để tạo recipe..."></textarea>
-
-      <label for="replayCreds">Danh sách tài khoản chạy lại (user:pass mỗi dòng)</label>
-      <textarea id="replayCreds" placeholder="user1:pass111&#10;user2:pass222&#10;demo:demo2024"></textarea>
-
-      <div class="actions">
-        <button class="btn-primary" type="button" id="replayBtn">Chạy y hệt cho tất cả acc</button>
+    <div class="card">
+      <h2>Danh sách tài khoản (user:pass, mỗi dòng)</h2>
+      <textarea id="credList" placeholder="user1:pass111&#10;user2:pass222&#10;demo:demo2024"></textarea>
+      <div style="margin-top:0.75rem;display:flex;gap:0.5rem">
+        <button class="btn" id="runBtn" style="flex:1" disabled>Chạy cho tất cả acc</button>
       </div>
     </div>
 
-    <p class="section-title">Hoặc cấu hình thủ công</p>
-
-    <div class="grid">
-      <div class="card">
-        <h2>Cấu hình</h2>
-
-        <label for="loginUrl">URL trang login / API</label>
-        <input type="url" id="loginUrl" placeholder="http://localhost:8080/mock/login-page" />
-        <p class="hint">API demo: <code>/mock/login</code> · HTML form demo: <code>/mock/login-page</code></p>
-
-        <div class="actions" style="margin-top:-0.25rem;margin-bottom:0.75rem">
-          <button class="btn-secondary" type="button" id="discoverBtn" style="flex:1">Tự phát hiện form login</button>
-        </div>
-        <div id="discoverInfo" class="hint" style="display:none;margin-bottom:0.9rem"></div>
-
-        <div class="row-2">
-          <div>
-            <label for="usernameField">Trường username</label>
-            <input type="text" id="usernameField" value="username" />
-          </div>
-          <div>
-            <label for="passwordField">Trường password</label>
-            <input type="text" id="passwordField" value="password" />
-          </div>
-        </div>
-
-        <div class="row-2">
-          <div>
-            <label for="payloadMode">Payload</label>
-            <select id="payloadMode">
-              <option value="json" selected>JSON API</option>
-              <option value="form">Form-urlencoded API</option>
-              <option value="html_form">HTML form (tự điền ô login)</option>
-            </select>
-          </div>
-          <div>
-            <label for="maxWorkers">Số luồng</label>
-            <input type="number" id="maxWorkers" min="1" max="10" value="3" />
-          </div>
-        </div>
-
-        <label for="rateLimit">Rate limit (request/giây)</label>
-        <input type="number" id="rateLimit" min="0.1" max="20" step="0.1" value="2" />
-
-        <label for="postLoginUrl">URL sau login (tuỳ chọn — để quét màn hình)</label>
-        <input type="url" id="postLoginUrl" placeholder="http://localhost:8080/mock/dashboard" />
-        <p class="hint">Để trống: HTML form quét trang sau login; JSON API tự mở <code>/mock/dashboard</code></p>
-
-        <div class="actions">
-          <button class="btn-primary" id="startBtn">Bắt đầu test</button>
-          <button class="btn-secondary" id="demoBtn">Điền demo</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Danh sách tài khoản</h2>
-        <label for="credentials">user:pass (mỗi dòng một cặp)</label>
-        <textarea id="credentials" placeholder="admin:admin123&#10;user1:pass111&#10;user2:pass222&#10;demo:demo2024&#10;wrong:badpass"></textarea>
-        <p class="hint">Tối đa <span id="maxCreds">100</span> dòng. Dòng bắt đầu bằng # sẽ bị bỏ qua.</p>
-      </div>
-    </div>
-
-    <div class="status-bar" id="statusBar" style="display:none">
-      <div class="status-dot" id="statusDot"></div>
-      <span id="statusText">Đang chờ...</span>
-      <div class="stats">
-        <span>Tổng: <strong id="statTotal">0</strong></span>
-        <span class="success">OK: <strong id="statSuccess">0</strong></span>
-        <span class="fail">Lỗi: <strong id="statFail">0</strong></span>
-      </div>
-    </div>
-
-    <div class="card" style="margin-top:1.25rem">
-      <h2>Màn hình sau login (form chung)</h2>
-      <div id="screenContainer">
-        <div class="empty-state">Kết quả quét màn hình sẽ hiển thị ở đây sau khi login.</div>
-      </div>
-    </div>
-
-    <div class="card" style="margin-top:1.25rem">
-      <h2>Chi tiết kỹ thuật</h2>
-      <div id="resultsContainer">
-        <div class="empty-state">Chưa có kết quả. Nhấn "Bắt đầu test" để chạy.</div>
-      </div>
+    <div class="card" id="resultCard" style="display:none">
+      <h2>Kết quả</h2>
+      <div id="summary"></div>
+      <div id="results"></div>
     </div>
   </div>
 
   <script>
     const $ = (id) => document.getElementById(id);
-    let pollTimer = null;
-    let pollAttempts = 0;
-    const MAX_POLL_ATTEMPTS = 300;
+    const sessionId = crypto.randomUUID();
     let savedRecipe = null;
+    let pollTimer = null;
 
-    function buildRecordBody() {
-      const curl = $("curlInput").value.trim();
-      return {
-        name: "my-login-recipe",
-        login_url: $("loginUrl").value.trim(),
-        credentials: $("sampleCred").value.trim(),
-        curl_command: curl,
-        username_field: $("usernameField").value.trim() || "username",
-        password_field: $("passwordField").value.trim() || "password",
-        payload_mode: curl ? "json" : $("payloadMode").value,
-        page_url: $("payloadMode").value === "html_form" ? $("loginUrl").value.trim() : "",
-        post_login_url: $("postLoginUrl").value.trim(),
-        capture_screen: true,
-        verify_sample: true,
-      };
+    function showError(msg) {
+      $("error").textContent = msg;
+      $("error").classList.add("show");
+    }
+    function hideError() {
+      $("error").classList.remove("show");
     }
 
-    async function recordLogin() {
+    function navigate(url) {
       hideError();
-      $("recordBtn").disabled = true;
-      $("recordStatus").textContent = "Đang ghi lại...";
+      const target = url.trim();
+      if (!target) return showError("Nhập link trang login.");
+      const proxy = `/browser/go?sid=${encodeURIComponent(sessionId)}&url=${encodeURIComponent(target)}`;
+      $("browserFrame").src = proxy;
+    }
 
+    function setRecorded(message) {
+      $("recordStatus").textContent = "✓ " + message;
+      $("recordStatus").className = "status ok";
+      $("runBtn").disabled = false;
+    }
+
+    async function captureFromBrowser(data) {
       try {
-        const res = await fetch("/api/record-login", {
+        const res = await fetch("/api/browser/capture", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(buildRecordBody()),
+          body: JSON.stringify({
+            sid: sessionId,
+            action: data.action,
+            method: data.method,
+            fields: data.fields,
+            page_url: data.pageUrl,
+          }),
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Record failed");
-
-        savedRecipe = data.recipe;
-        $("recipeJson").value = JSON.stringify(data.recipe, null, 2);
-        $("recordStatus").textContent = data.message;
-        $("recordStatus").style.color = data.sample_login_ok ? "#22c55e" : "#f59e0b";
-      } catch (err) {
-        showError(err.message);
-        $("recordStatus").textContent = "";
-      } finally {
-        $("recordBtn").disabled = false;
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.detail || "Capture failed");
+        savedRecipe = json.recipe;
+        setRecorded(json.message);
+      } catch (e) {
+        console.warn(e);
       }
     }
 
-    function fillRecordDemo() {
-      $("loginUrl").value = `${window.location.origin}/mock/login-page`;
-      $("payloadMode").value = "html_form";
-      $("sampleCred").value = "admin:admin123";
-      $("curlInput").value = "";
-      $("replayCreds").value = ["user1:pass111", "user2:pass222", "demo:demo2024", "wrong:badpass"].join("\n");
-    }
+    window.addEventListener("message", (event) => {
+      if (event.data?.type === "browser-login-captured") {
+        captureFromBrowser(event.data);
+      }
+    });
 
-    async function replayLogin() {
+    async function runAll() {
       hideError();
-      if (!savedRecipe && !$("recipeJson").value.trim()) {
-        showError("Ghi lại login trước (bước 1).");
-        return;
+      if (!savedRecipe) {
+        const res = await fetch(`/api/browser/recipe?sid=${sessionId}`);
+        const data = await res.json();
+        if (data.recorded) savedRecipe = data.recipe;
       }
+      if (!savedRecipe) return showError("Login 1 lần trong khung trình duyệt trước.");
 
-      let recipe = savedRecipe;
-      if (!recipe) {
-        try {
-          recipe = JSON.parse($("recipeJson").value);
-        } catch {
-          showError("Recipe JSON không hợp lệ.");
-          return;
-        }
-      }
-
-      $("replayBtn").disabled = true;
-      if (pollTimer) clearTimeout(pollTimer);
-      pollAttempts = 0;
-
-      const body = {
-        recipe,
-        credentials: $("replayCreds").value,
-        max_workers: parseInt($("maxWorkers").value, 10) || 3,
-        rate_limit_rps: parseFloat($("rateLimit").value) || 2,
-      };
+      $("runBtn").disabled = true;
+      $("resultCard").style.display = "block";
+      $("results").innerHTML = "<div class='result-item'>Đang chạy...</div>";
 
       try {
         const res = await fetch("/api/replay", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
+          body: JSON.stringify({
+            recipe: savedRecipe,
+            credentials: $("credList").value,
+            max_workers: 3,
+            rate_limit_rps: 2,
+          }),
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Replay failed");
-        updateStatus(data);
-        pollJob(data.job_id);
-      } catch (err) {
-        showError(err.message);
-        $("replayBtn").disabled = false;
+        const job = await res.json();
+        if (!res.ok) throw new Error(job.detail || "Run failed");
+        pollJob(job.job_id);
+      } catch (e) {
+        showError(e.message);
+        $("runBtn").disabled = false;
       }
-    }
-
-    async function loadConfig() {
-      const res = await fetch("/api/config");
-      const cfg = await res.json();
-      $("maxWorkers").value = cfg.default_max_workers;
-      $("rateLimit").value = cfg.default_rate_limit_rps;
-      $("maxCreds").textContent = cfg.max_credentials_per_job;
-
-      const container = $("allowedDomains");
-      container.innerHTML = cfg.allowed_domains
-        .map((d) => `<span class="badge">Domain cho phép: <strong>${d}</strong></span>`)
-        .join("");
-    }
-
-    function showError(msg) {
-      const el = $("errorBanner");
-      el.textContent = msg;
-      el.classList.add("visible");
-    }
-
-    function hideError() {
-      $("errorBanner").classList.remove("visible");
-    }
-
-    function fillDemo() {
-      const mode = $("payloadMode").value;
-      if (mode === "html_form") {
-        $("loginUrl").value = `${window.location.origin}/mock/login-page`;
-      } else {
-        $("loginUrl").value = `${window.location.origin}/mock/login`;
-      }
-      $("credentials").value = [
-        "admin:admin123",
-        "user1:pass111",
-        "user2:pass222",
-        "demo:demo2024",
-        "wrong:badpass",
-      ].join("\n");
-    }
-
-    async function discoverForm() {
-      hideError();
-      const pageUrl = $("loginUrl").value.trim();
-      if (!pageUrl) {
-        showError("Nhập URL trang login trước khi phát hiện form.");
-        return;
-      }
-
-      $("discoverBtn").disabled = true;
-      $("discoverBtn").textContent = "Đang quét...";
-
-      try {
-        const res = await fetch("/api/discover-form", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ page_url: pageUrl }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Discover failed");
-
-        $("usernameField").value = data.username_field;
-        $("passwordField").value = data.password_field;
-        $("payloadMode").value = "html_form";
-        $("loginUrl").value = data.page_url;
-
-        const info = $("discoverInfo");
-        info.style.display = "block";
-        info.innerHTML = [
-          `Đã tìm thấy <strong>${data.all_forms_count}</strong> form, chọn form #${data.form_index + 1} (độ tin cậy: ${data.confidence})`,
-          `<br>Action: <code>${escapeHtml(data.action_url)}</code>`,
-          `<br>Method: <code>${data.method}</code>`,
-          data.hidden_fields && Object.keys(data.hidden_fields).length
-            ? `<br>Hidden fields: <code>${escapeHtml(JSON.stringify(data.hidden_fields))}</code>`
-            : "",
-        ].join("");
-      } catch (err) {
-        showError(err.message);
-      } finally {
-        $("discoverBtn").disabled = false;
-        $("discoverBtn").textContent = "Tự phát hiện form login";
-      }
-    }
-
-    function renderScreenField(label, value) {
-      if (value === undefined || value === null || value === "") return "";
-      const text = Array.isArray(value) ? value.join(", ") : String(value);
-      return `<dt>${escapeHtml(label)}</dt><dd>${escapeHtml(text)}</dd>`;
-    }
-
-    function renderScreenCard(result) {
-      const screen = result.details?.screen;
-      if (!screen) {
-        return `<div class="screen-card"><h3>${escapeHtml(result.username)} <span class="pill err">Chưa quét màn hình</span></h3></div>`;
-      }
-
-      const page = screen.page || {};
-      const user = screen.user_detected || {};
-      const session = screen.session || {};
-      const links = (page.links || []).map((l) => `${l.text} → ${l.href}`).join("; ");
-      const buttons = (page.buttons || []).join(", ");
-      const tables = (page.tables || [])
-        .map((t) => {
-          const header = (t.headers || []).join(" | ");
-          const rows = (t.rows || []).map((r) => r.join(" | ")).join(" / ");
-          return [header, rows].filter(Boolean).join(" → ");
-        })
-        .join(" || ");
-
-      const fields = [
-        renderScreenField("Tài khoản", screen.account),
-        renderScreenField("Trạng thái login", screen.login_status),
-        renderScreenField("Thời điểm quét", screen.captured_at),
-        renderScreenField("Tiêu đề trang", page.title),
-        renderScreenField("URL hiện tại", page.url),
-        renderScreenField("Tiêu đề chính", (page.headings || []).join(" · ")),
-        renderScreenField("Nội dung nhìn thấy", page.main_text),
-        renderScreenField("Tên user", user.name || user.headline),
-        renderScreenField("Username", user.username),
-        renderScreenField("Email", user.email),
-        renderScreenField("Role", user.role),
-        renderScreenField("Token", session.token),
-        renderScreenField("Cookies", (session.cookies || []).map((c) => c.name).join(", ")),
-        renderScreenField("Nút bấm", buttons),
-        renderScreenField("Liên kết", links),
-        renderScreenField("Bảng dữ liệu", tables),
-      ].join("");
-
-      const statusPill = screen.login_status === "success"
-        ? '<span class="pill ok">Thành công</span>'
-        : '<span class="pill err">Thất bại</span>';
-
-      return `
-        <div class="screen-card">
-          <h3>${escapeHtml(screen.account || result.username)} ${statusPill}</h3>
-          <dl class="screen-form">${fields}</dl>
-        </div>
-      `;
-    }
-
-    function renderScreens(job) {
-      const container = $("screenContainer");
-      if (!job.results || job.results.length === 0) {
-        container.innerHTML = '<div class="empty-state">Đang quét màn hình...</div>';
-        return;
-      }
-      container.innerHTML = `<div class="screen-grid">${job.results.map(renderScreenCard).join("")}</div>`;
-    }
-
-    function renderResults(job) {
-      renderScreens(job);
-      const container = $("resultsContainer");
-      if (!job.results || job.results.length === 0) {
-        container.innerHTML = '<div class="empty-state">Đang xử lý...</div>';
-        return;
-      }
-
-      const rows = job.results.map((r) => {
-        const details = r.success
-          ? JSON.stringify(r.details, null, 2)
-          : (r.details?.response_preview || r.message || "");
-        return `
-          <tr>
-            <td><strong>${escapeHtml(r.username)}</strong></td>
-            <td><span class="pill ${r.success ? "ok" : "err"}">${r.success ? "Thành công" : "Thất bại"}</span></td>
-            <td>${r.status_code ?? "—"}</td>
-            <td>${r.response_time_ms != null ? r.response_time_ms + " ms" : "—"}</td>
-            <td>${escapeHtml(r.message)}</td>
-            <td><div class="details-box">${escapeHtml(details)}</div></td>
-          </tr>
-        `;
-      }).join("");
-
-      container.innerHTML = `
-        <table class="results-table">
-          <thead>
-            <tr>
-              <th>Username</th>
-              <th>Trạng thái</th>
-              <th>HTTP</th>
-              <th>Thời gian</th>
-              <th>Thông báo</th>
-              <th>Chi tiết</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      `;
-    }
-
-    function escapeHtml(str) {
-      return String(str)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-    }
-
-    function updateStatus(job) {
-      $("statusBar").style.display = "flex";
-      const dot = $("statusDot");
-      dot.className = "status-dot " + job.status;
-
-      const labels = {
-        pending: "Đang chờ...",
-        running: "Đang chạy...",
-        completed: "Hoàn tất",
-        failed: "Lỗi job",
-      };
-      $("statusText").textContent = labels[job.status] || job.status;
-      if (job.error) $("statusText").textContent += " — " + job.error;
-
-      $("statTotal").textContent = job.total;
-      $("statSuccess").textContent = job.success_count;
-      $("statFail").textContent = job.failure_count;
     }
 
     async function pollJob(jobId) {
-      pollAttempts += 1;
-      if (pollAttempts > MAX_POLL_ATTEMPTS) {
-        showError("Job quá thời gian chờ. Kiểm tra URL API login và thử lại.");
-        $("startBtn").disabled = false;
-        $("replayBtn").disabled = false;
+      const res = await fetch(`/api/jobs/${jobId}`);
+      const job = await res.json();
+      if (job.status === "pending" || job.status === "running") {
+        $("summary").textContent = `Đang chạy... ${job.success_count}/${job.total} OK`;
+        pollTimer = setTimeout(() => pollJob(jobId), 700);
         return;
       }
-
-      const res = await fetch(`/api/jobs/${jobId}`);
-      if (!res.ok) throw new Error("Không lấy được trạng thái job");
-      const job = await res.json();
-      updateStatus(job);
-      renderResults(job);
-
-      if (job.status === "pending" || job.status === "running") {
-        pollTimer = setTimeout(() => pollJob(jobId), 800);
-      } else {
-        $("startBtn").disabled = false;
-        $("replayBtn").disabled = false;
-        pollTimer = null;
-      }
+      $("runBtn").disabled = false;
+      $("summary").textContent = `Xong: ${job.success_count} thành công, ${job.failure_count} lỗi`;
+      $("results").innerHTML = (job.results || []).map((r) => {
+        const screen = r.details?.screen?.page?.main_text || r.message;
+        return `<div class="result-item">
+          <strong>${r.username}</strong>
+          <span class="pill ${r.success ? "ok" : "err"}">${r.success ? "OK" : "Lỗi"}</span>
+          <div style="margin-top:0.35rem;color:#8b9cb8">${screen?.slice?.(0,200) || ""}</div>
+        </div>`;
+      }).join("");
     }
 
-    async function startTest() {
-      hideError();
-      $("startBtn").disabled = true;
-      if (pollTimer) clearTimeout(pollTimer);
-      pollAttempts = 0;
-
-      const body = {
-        login_url: $("loginUrl").value.trim(),
-        credentials: $("credentials").value,
-        username_field: $("usernameField").value.trim() || "username",
-        password_field: $("passwordField").value.trim() || "password",
-        payload_mode: $("payloadMode").value,
-        page_url: $("payloadMode").value === "html_form" ? $("loginUrl").value.trim() : "",
-        post_login_url: $("postLoginUrl").value.trim(),
-        capture_screen: true,
-        max_workers: parseInt($("maxWorkers").value, 10) || 3,
-        rate_limit_rps: parseFloat($("rateLimit").value) || 2,
-      };
-
-      try {
-        const res = await fetch("/api/jobs", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.detail || "Request failed");
-        }
-        updateStatus(data);
-        pollJob(data.job_id);
-      } catch (err) {
-        showError(err.message);
-        $("startBtn").disabled = false;
-      }
-    }
-
-    $("startBtn").addEventListener("click", startTest);
-    $("demoBtn").addEventListener("click", fillDemo);
-    $("recordBtn").addEventListener("click", recordLogin);
-    $("recordDemoBtn").addEventListener("click", fillRecordDemo);
-    $("replayBtn").addEventListener("click", replayLogin);
-    $("discoverBtn").addEventListener("click", discoverForm);
-    $("payloadMode").addEventListener("change", () => {
-      $("discoverInfo").style.display = "none";
-      if ($("payloadMode").value === "html_form" && !$("loginUrl").value.includes("login-page")) {
-        $("loginUrl").placeholder = `${window.location.origin}/mock/login-page`;
-      }
+    $("goBtn").addEventListener("click", () => navigate($("urlInput").value));
+    $("urlInput").addEventListener("keydown", (e) => { if (e.key === "Enter") navigate($("urlInput").value); });
+    $("runBtn").addEventListener("click", runAll);
+    $("demoBtn").addEventListener("click", () => {
+      const url = `${location.origin}/mock/login-page`;
+      $("urlInput").value = url;
+      $("credList").value = "user1:pass111\nuser2:pass222\ndemo:demo2024\nwrong:badpass";
+      navigate(url);
     });
-    window.addEventListener("beforeunload", () => {
-      if (pollTimer) clearTimeout(pollTimer);
+
+    fetch("/api/config").then((r) => r.json()).then((cfg) => {
+      $("urlInput").value = `${location.origin}/mock/login-page`;
+      $("credList").value = "user1:pass111\nuser2:pass222\ndemo:demo2024";
+      navigate($("urlInput").value);
     });
-    loadConfig().then(fillDemo);
   </script>
 </body>
 </html>
