@@ -67,7 +67,20 @@ def main() -> None:
     )
 
 
+def fix_config() -> None:
+    from app.config import CONFIG_PATH, repair_config_file
+
+    backup = repair_config_file()
+    if str(backup) != str(CONFIG_PATH):
+        print(f"Da luu config loi vao: {backup}")
+    print(f"Da tao config.json moi: {CONFIG_PATH}")
+    print("Mo file va them domain vao allowed_domains neu can.")
+
+
 if __name__ == "__main__":
     auto = "--install" in sys.argv
+    if "--fix-config" in sys.argv:
+        fix_config()
+        raise SystemExit(0)
     ensure_dependencies(auto_install=auto)
     main()
