@@ -1,0 +1,10 @@
+{
+  "allowed_domains": [
+    "localhost",
+    "127.0.0.1"
+  ],
+  "default_rate_limit_rps": 2,
+  "default_max_workers": 3,
+  "max_credentials_per_job": 100,
+  "log_dir": "logs"
+}

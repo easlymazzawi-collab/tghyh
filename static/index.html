@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login Tester — API chính thức</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --surface-2: #243044;
+      --border: #2d3f5c;
+      --text: #e8edf5;
+      --muted: #8b9cb8;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --radius: 10px;
+      --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 4rem;
+    }
+
+    header {
+      margin-bottom: 2rem;
+    }
+
+    header h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    header p {
+      color: var(--muted);
+      margin-top: 0.35rem;
+      font-size: 0.95rem;
+    }
+
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    .badge {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.25rem 0.75rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .badge strong { color: var(--warning); }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+    }
+
+    @media (max-width: 860px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+    }
+
+    .card h2 {
+      font-size: 1rem;
+      margin-bottom: 1rem;
+      color: var(--text);
+    }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 0.35rem;
+    }
+
+    input, textarea, select {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 0.6rem 0.75rem;
+      font-size: 0.9rem;
+      font-family: inherit;
+      margin-bottom: 0.9rem;
+    }
+
+    textarea {
+      min-height: 180px;
+      resize: vertical;
+      font-family: "Cascadia Code", "Fira Code", monospace;
+      font-size: 0.85rem;
+    }
+
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+    }
+
+    .row-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+
+    .actions {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 0.25rem;
+    }
+
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 0.65rem 1.25rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+      flex: 1;
+    }
+
+    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-secondary {
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover { background: var(--border); }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin: 1.25rem 0;
+      padding: 0.85rem 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 0.9rem;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .status-dot.running { background: var(--warning); animation: pulse 1s infinite; }
+    .status-dot.completed { background: var(--success); }
+    .status-dot.failed { background: var(--danger); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .stats {
+      display: flex;
+      gap: 1.5rem;
+      margin-left: auto;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    .stats span.success { color: var(--success); }
+    .stats span.fail { color: var(--danger); }
+
+    .results-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    .results-table th {
+      text-align: left;
+      padding: 0.6rem 0.75rem;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      font-weight: 500;
+    }
+
+    .results-table td {
+      padding: 0.65rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    .results-table tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 0.15rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .pill.ok { background: rgba(34, 197, 94, 0.15); color: var(--success); }
+    .pill.err { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+
+    .details-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.5rem 0.65rem;
+      font-family: monospace;
+      font-size: 0.75rem;
+      max-height: 120px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: var(--muted);
+    }
+
+    .hint {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: -0.5rem;
+      margin-bottom: 0.9rem;
+    }
+
+    .error-banner {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+      display: none;
+    }
+
+    .error-banner.visible { display: block; }
+
+    .empty-state {
+      text-align: center;
+      color: var(--muted);
+      padding: 2.5rem 1rem;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Login Tester</h1>
+      <p>Test đăng nhập qua API chính thức — chỉ domain được phép, có rate limit &amp; log kết quả.</p>
+      <div class="badge-row" id="allowedDomains"></div>
+    </header>
+
+    <div class="error-banner" id="errorBanner"></div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Cấu hình</h2>
+
+        <label for="loginUrl">URL API Login</label>
+        <input type="url" id="loginUrl" placeholder="http://localhost:8080/mock/login" />
+        <p class="hint">Demo: <code>http://localhost:8080/mock/login</code></p>
+
+        <div class="row-2">
+          <div>
+            <label for="usernameField">Trường username</label>
+            <input type="text" id="usernameField" value="username" />
+          </div>
+          <div>
+            <label for="passwordField">Trường password</label>
+            <input type="text" id="passwordField" value="password" />
+          </div>
+        </div>
+
+        <div class="row-2">
+          <div>
+            <label for="payloadMode">Payload</label>
+            <select id="payloadMode">
+              <option value="json" selected>JSON</option>
+              <option value="form">Form-urlencoded</option>
+            </select>
+          </div>
+          <div>
+            <label for="maxWorkers">Số luồng</label>
+            <input type="number" id="maxWorkers" min="1" max="10" value="3" />
+          </div>
+        </div>
+
+        <label for="rateLimit">Rate limit (request/giây)</label>
+        <input type="number" id="rateLimit" min="0.1" max="20" step="0.1" value="2" />
+
+        <div class="actions">
+          <button class="btn-primary" id="startBtn">Bắt đầu test</button>
+          <button class="btn-secondary" id="demoBtn">Điền demo</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Danh sách tài khoản</h2>
+        <label for="credentials">user:pass (mỗi dòng một cặp)</label>
+        <textarea id="credentials" placeholder="admin:admin123&#10;user1:pass111&#10;user2:pass222&#10;demo:demo2024&#10;wrong:badpass"></textarea>
+        <p class="hint">Tối đa <span id="maxCreds">100</span> dòng. Dòng bắt đầu bằng # sẽ bị bỏ qua.</p>
+      </div>
+    </div>
+
+    <div class="status-bar" id="statusBar" style="display:none">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Đang chờ...</span>
+      <div class="stats">
+        <span>Tổng: <strong id="statTotal">0</strong></span>
+        <span class="success">OK: <strong id="statSuccess">0</strong></span>
+        <span class="fail">Lỗi: <strong id="statFail">0</strong></span>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:1.25rem">
+      <h2>Kết quả chi tiết</h2>
+      <div id="resultsContainer">
+        <div class="empty-state">Chưa có kết quả. Nhấn "Bắt đầu test" để chạy.</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let pollTimer = null;
+
+    async function loadConfig() {
+      const res = await fetch("/api/config");
+      const cfg = await res.json();
+      $("maxWorkers").value = cfg.default_max_workers;
+      $("rateLimit").value = cfg.default_rate_limit_rps;
+      $("maxCreds").textContent = cfg.max_credentials_per_job;
+
+      const container = $("allowedDomains");
+      container.innerHTML = cfg.allowed_domains
+        .map((d) => `<span class="badge">Domain cho phép: <strong>${d}</strong></span>`)
+        .join("");
+    }
+
+    function showError(msg) {
+      const el = $("errorBanner");
+      el.textContent = msg;
+      el.classList.add("visible");
+    }
+
+    function hideError() {
+      $("errorBanner").classList.remove("visible");
+    }
+
+    function fillDemo() {
+      $("loginUrl").value = `${window.location.origin}/mock/login`;
+      $("credentials").value = [
+        "admin:admin123",
+        "user1:pass111",
+        "user2:pass222",
+        "demo:demo2024",
+        "wrong:badpass",
+      ].join("\n");
+    }
+
+    function renderResults(job) {
+      const container = $("resultsContainer");
+      if (!job.results || job.results.length === 0) {
+        container.innerHTML = '<div class="empty-state">Đang xử lý...</div>';
+        return;
+      }
+
+      const rows = job.results.map((r) => {
+        const details = r.success
+          ? JSON.stringify(r.details, null, 2)
+          : (r.details?.response_preview || r.message || "");
+        return `
+          <tr>
+            <td><strong>${escapeHtml(r.username)}</strong></td>
+            <td><span class="pill ${r.success ? "ok" : "err"}">${r.success ? "Thành công" : "Thất bại"}</span></td>
+            <td>${r.status_code ?? "—"}</td>
+            <td>${r.response_time_ms != null ? r.response_time_ms + " ms" : "—"}</td>
+            <td>${escapeHtml(r.message)}</td>
+            <td><div class="details-box">${escapeHtml(details)}</div></td>
+          </tr>
+        `;
+      }).join("");
+
+      container.innerHTML = `
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Trạng thái</th>
+              <th>HTTP</th>
+              <th>Thời gian</th>
+              <th>Thông báo</th>
+              <th>Chi tiết</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function updateStatus(job) {
+      $("statusBar").style.display = "flex";
+      const dot = $("statusDot");
+      dot.className = "status-dot " + job.status;
+
+      const labels = {
+        pending: "Đang chờ...",
+        running: "Đang chạy...",
+        completed: "Hoàn tất",
+        failed: "Lỗi job",
+      };
+      $("statusText").textContent = labels[job.status] || job.status;
+      if (job.error) $("statusText").textContent += " — " + job.error;
+
+      $("statTotal").textContent = job.total;
+      $("statSuccess").textContent = job.success_count;
+      $("statFail").textContent = job.failure_count;
+    }
+
+    async function pollJob(jobId) {
+      const res = await fetch(`/api/jobs/${jobId}`);
+      if (!res.ok) throw new Error("Không lấy được trạng thái job");
+      const job = await res.json();
+      updateStatus(job);
+      renderResults(job);
+
+      if (job.status === "pending" || job.status === "running") {
+        pollTimer = setTimeout(() => pollJob(jobId), 800);
+      } else {
+        $("startBtn").disabled = false;
+      }
+    }
+
+    async function startTest() {
+      hideError();
+      $("startBtn").disabled = true;
+      if (pollTimer) clearTimeout(pollTimer);
+
+      const body = {
+        login_url: $("loginUrl").value.trim(),
+        credentials: $("credentials").value,
+        username_field: $("usernameField").value.trim() || "username",
+        password_field: $("passwordField").value.trim() || "password",
+        payload_mode: $("payloadMode").value,
+        max_workers: parseInt($("maxWorkers").value, 10) || 3,
+        rate_limit_rps: parseFloat($("rateLimit").value) || 2,
+      };
+
+      try {
+        const res = await fetch("/api/jobs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.detail || "Request failed");
+        }
+        updateStatus(data);
+        pollJob(data.job_id);
+      } catch (err) {
+        showError(err.message);
+        $("startBtn").disabled = false;
+      }
+    }
+
+    $("startBtn").addEventListener("click", startTest);
+    $("demoBtn").addEventListener("click", fillDemo);
+    loadConfig().then(fillDemo);
+  </script>
+</body>
+</html>
