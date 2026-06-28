@@ -4,6 +4,7 @@ import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional
+from urllib.parse import urljoin
 
 import httpx
 
@@ -18,6 +19,7 @@ from app.models import (
     TestLoginRequest,
 )
 from app.rate_limiter import RateLimiter
+from app.screen_capture import build_screen_report
 from app.validators import parse_credentials, validate_allowed_domain
 
 
@@ -79,6 +81,44 @@ def _extract_success_details(response: httpx.Response) -> Dict[str, object]:
     return details
 
 
+def _attach_screen_report(
+    request: TestLoginRequest,
+    username: str,
+    success: bool,
+    details: Dict[str, object],
+    response: httpx.Response,
+    client: httpx.Client,
+) -> Dict[str, object]:
+    if not request.capture_screen:
+        return details
+
+    api_data: Dict[str, object] = {}
+    if isinstance(details.get("response_json"), dict):
+        api_data = details["response_json"]  # type: ignore[assignment]
+    elif isinstance(details.get("api_data"), dict):
+        api_data = details["api_data"]  # type: ignore[assignment]
+
+    if details.get("token"):
+        api_data = {**api_data, "token": details["token"]}
+    if details.get("user"):
+        api_data = {**api_data, "user": details["user"]}
+
+    post_login_url = request.post_login_url.strip()
+    if not post_login_url and success and request.payload_mode == LoginPayloadMode.JSON:
+        post_login_url = urljoin(str(response.url), "/mock/dashboard")
+
+    screen = build_screen_report(
+        username,
+        success,
+        response=response,
+        client=client,
+        post_login_url=post_login_url,
+        api_data=api_data if api_data else None,
+    )
+    details["screen"] = screen
+    return details
+
+
 def _attempt_html_form_login(
     request: TestLoginRequest,
     username: str,
@@ -118,6 +158,10 @@ def _attempt_html_form_login(
                 details.update(_extract_success_details(response))
             else:
                 details["response_preview"] = response.text[:300]
+
+            details = _attach_screen_report(
+                request, username, success, details, response, client
+            )
 
             return CredentialResult(
                 username=username,
@@ -178,15 +222,22 @@ def _attempt_login(
                 if response.status_code == 200 and "error" in body_text:
                     success = False
 
+            details = (
+                _extract_success_details(response) if success else {
+                    "response_preview": response.text[:300],
+                }
+            )
+            details = _attach_screen_report(
+                request, username, success, details, response, client
+            )
+
             return CredentialResult(
                 username=username,
                 success=success,
                 status_code=response.status_code,
                 response_time_ms=round(elapsed_ms, 2),
                 message="Login successful" if success else "Login failed",
-                details=_extract_success_details(response) if success else {
-                    "response_preview": response.text[:300],
-                },
+                details=details,
             )
     except httpx.RequestError as exc:
         return CredentialResult(
@@ -245,6 +296,7 @@ def run_login_job(job_id: str, request: TestLoginRequest) -> None:
                         "status_code": result.status_code,
                         "response_time_ms": result.response_time_ms,
                         "message": result.message,
+                        "screen": result.details.get("screen"),
                         "details": result.details,
                     },
                 )
@@ -260,6 +312,8 @@ def create_job(request: TestLoginRequest) -> JobSummary:
     validate_allowed_domain(request.login_url)
     if request.payload_mode == LoginPayloadMode.HTML_FORM:
         validate_allowed_domain(request.page_url or request.login_url)
+    if request.post_login_url.strip():
+        validate_allowed_domain(request.post_login_url.strip())
     parse_credentials(request.credentials)
 
     job_id = str(uuid.uuid4())

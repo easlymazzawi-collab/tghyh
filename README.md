@@ -4,7 +4,8 @@ Tool test đăng nhập qua **API chính thức** trên domain bạn kiểm soá
 
 ## Tính năng
 
-- Giao diện web nhập `user:pass` (mỗi dòng) + URL API login
+- **Tự phát hiện form HTML** — quét trang login, tìm ô email/username/password và hidden fields (CSRF)
+- Hỗ trợ 3 chế độ: JSON API, Form API, **HTML form** (tự điền ô login)
 - Chạy nhiều luồng song song (cấu hình 1–10 workers)
 - Rate limit (request/giây) để tránh quá tải API
 - **Domain allowlist** — chỉ gọi tới domain trong `config.json`

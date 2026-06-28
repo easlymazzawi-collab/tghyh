@@ -280,6 +280,50 @@
       padding: 2.5rem 1rem;
       font-size: 0.9rem;
     }
+
+    .screen-grid {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .screen-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      background: var(--bg);
+    }
+
+    .screen-card h3 {
+      font-size: 0.95rem;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .screen-form {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 0.35rem 0.75rem;
+      font-size: 0.82rem;
+    }
+
+    .screen-form dt {
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .screen-form dd {
+      margin: 0;
+      word-break: break-word;
+    }
+
+    .section-title {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin: 1rem 0 0.75rem;
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
@@ -334,6 +378,10 @@
         <label for="rateLimit">Rate limit (request/giây)</label>
         <input type="number" id="rateLimit" min="0.1" max="20" step="0.1" value="2" />
 
+        <label for="postLoginUrl">URL sau login (tuỳ chọn — để quét màn hình)</label>
+        <input type="url" id="postLoginUrl" placeholder="http://localhost:8080/mock/dashboard" />
+        <p class="hint">Để trống: HTML form quét trang sau login; JSON API tự mở <code>/mock/dashboard</code></p>
+
         <div class="actions">
           <button class="btn-primary" id="startBtn">Bắt đầu test</button>
           <button class="btn-secondary" id="demoBtn">Điền demo</button>
@@ -359,7 +407,14 @@
     </div>
 
     <div class="card" style="margin-top:1.25rem">
-      <h2>Kết quả chi tiết</h2>
+      <h2>Màn hình sau login (form chung)</h2>
+      <div id="screenContainer">
+        <div class="empty-state">Kết quả quét màn hình sẽ hiển thị ở đây sau khi login.</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:1.25rem">
+      <h2>Chi tiết kỹ thuật</h2>
       <div id="resultsContainer">
         <div class="empty-state">Chưa có kết quả. Nhấn "Bắt đầu test" để chạy.</div>
       </div>
@@ -454,7 +509,73 @@
       }
     }
 
+    function renderScreenField(label, value) {
+      if (value === undefined || value === null || value === "") return "";
+      const text = Array.isArray(value) ? value.join(", ") : String(value);
+      return `<dt>${escapeHtml(label)}</dt><dd>${escapeHtml(text)}</dd>`;
+    }
+
+    function renderScreenCard(result) {
+      const screen = result.details?.screen;
+      if (!screen) {
+        return `<div class="screen-card"><h3>${escapeHtml(result.username)} <span class="pill err">Chưa quét màn hình</span></h3></div>`;
+      }
+
+      const page = screen.page || {};
+      const user = screen.user_detected || {};
+      const session = screen.session || {};
+      const links = (page.links || []).map((l) => `${l.text} → ${l.href}`).join("; ");
+      const buttons = (page.buttons || []).join(", ");
+      const tables = (page.tables || [])
+        .map((t) => {
+          const header = (t.headers || []).join(" | ");
+          const rows = (t.rows || []).map((r) => r.join(" | ")).join(" / ");
+          return [header, rows].filter(Boolean).join(" → ");
+        })
+        .join(" || ");
+
+      const fields = [
+        renderScreenField("Tài khoản", screen.account),
+        renderScreenField("Trạng thái login", screen.login_status),
+        renderScreenField("Thời điểm quét", screen.captured_at),
+        renderScreenField("Tiêu đề trang", page.title),
+        renderScreenField("URL hiện tại", page.url),
+        renderScreenField("Tiêu đề chính", (page.headings || []).join(" · ")),
+        renderScreenField("Nội dung nhìn thấy", page.main_text),
+        renderScreenField("Tên user", user.name || user.headline),
+        renderScreenField("Username", user.username),
+        renderScreenField("Email", user.email),
+        renderScreenField("Role", user.role),
+        renderScreenField("Token", session.token),
+        renderScreenField("Cookies", (session.cookies || []).map((c) => c.name).join(", ")),
+        renderScreenField("Nút bấm", buttons),
+        renderScreenField("Liên kết", links),
+        renderScreenField("Bảng dữ liệu", tables),
+      ].join("");
+
+      const statusPill = screen.login_status === "success"
+        ? '<span class="pill ok">Thành công</span>'
+        : '<span class="pill err">Thất bại</span>';
+
+      return `
+        <div class="screen-card">
+          <h3>${escapeHtml(screen.account || result.username)} ${statusPill}</h3>
+          <dl class="screen-form">${fields}</dl>
+        </div>
+      `;
+    }
+
+    function renderScreens(job) {
+      const container = $("screenContainer");
+      if (!job.results || job.results.length === 0) {
+        container.innerHTML = '<div class="empty-state">Đang quét màn hình...</div>';
+        return;
+      }
+      container.innerHTML = `<div class="screen-grid">${job.results.map(renderScreenCard).join("")}</div>`;
+    }
+
     function renderResults(job) {
+      renderScreens(job);
       const container = $("resultsContainer");
       if (!job.results || job.results.length === 0) {
         container.innerHTML = '<div class="empty-state">Đang xử lý...</div>';
@@ -556,6 +677,8 @@
         password_field: $("passwordField").value.trim() || "password",
         payload_mode: $("payloadMode").value,
         page_url: $("payloadMode").value === "html_form" ? $("loginUrl").value.trim() : "",
+        post_login_url: $("postLoginUrl").value.trim(),
+        capture_screen: true,
         max_workers: parseInt($("maxWorkers").value, 10) || 3,
         rate_limit_rps: parseFloat($("rateLimit").value) || 2,
       };

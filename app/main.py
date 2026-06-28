@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 
 import httpx
-from fastapi import FastAPI, Form, HTTPException
+from fastapi import FastAPI, Form, Header, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -127,9 +127,18 @@ def mock_login_form(
             status_code=401,
         )
     return HTMLResponse(
-        f"""<h1>Welcome, {username}!</h1>
-        <p>Login successful</p>
-        <a href="/mock/logout">Logout</a>""",
+        f"""<!DOCTYPE html>
+<html lang="vi"><head><meta charset="UTF-8"><title>Welcome {username}</title></head>
+<body>
+  <h1>Welcome, {username}!</h1>
+  <h2>Login successful</h2>
+  <table border="1" cellpadding="6">
+    <tr><th>Username</th><td>{username}</td></tr>
+    <tr><th>Role</th><td>{"admin" if username == "admin" else "user"}</td></tr>
+    <tr><th>Email</th><td>{username}@example.local</td></tr>
+  </table>
+  <p><a href="/mock/logout">Logout</a></p>
+</body></html>""",
         status_code=200,
     )
 
@@ -137,6 +146,30 @@ def mock_login_form(
 @app.get("/mock/logout")
 def mock_logout() -> RedirectResponse:
     return RedirectResponse(url="/mock/login-page", status_code=302)
+
+
+@app.get("/mock/dashboard", response_class=HTMLResponse)
+def mock_dashboard(authorization: str | None = Header(default=None)) -> str:
+    username = "unknown"
+    role = "user"
+    if authorization and "mock-jwt-" in authorization.lower():
+        username = authorization.lower().split("mock-jwt-", 1)[1].strip()
+        role = "admin" if username == "admin" else "user"
+
+    return f"""<!DOCTYPE html>
+<html lang="vi"><head><meta charset="UTF-8"><title>Dashboard - {username}</title></head>
+<body>
+  <h1>Dashboard</h1>
+  <h2>Xin chào, {username}</h2>
+  <p>Bạn đã đăng nhập thành công vào hệ thống demo.</p>
+  <table border="1" cellpadding="6">
+    <tr><th>Username</th><td>{username}</td></tr>
+    <tr><th>Role</th><td>{role}</td></tr>
+    <tr><th>Email</th><td>{username}@example.local</td></tr>
+    <tr><th>Plan</th><td>{"Enterprise" if role == "admin" else "Standard"}</td></tr>
+  </table>
+  <p><button type="button">Cài đặt</button> <button type="button">Đăng xuất</button></p>
+</body></html>"""
 
 
 @app.post("/mock/login")

@@ -55,6 +55,11 @@ class TestLoginRequest(BaseModel):
     rate_limit_rps: float = Field(default=2.0, ge=0.1, le=20.0)
     extra_headers: Dict[str, str] = Field(default_factory=dict)
     hidden_fields: Dict[str, str] = Field(default_factory=dict)
+    post_login_url: str = Field(
+        default="",
+        description="Optional URL to open after login and capture screen",
+    )
+    capture_screen: bool = True
 
     @field_validator("login_url")
     @classmethod
