@@ -14,6 +14,28 @@ Tool test đăng nhập qua **API chính thức** trên domain bạn kiểm soá
 
 ## Cài đặt
 
+### Windows
+
+```bat
+install.bat
+start.bat
+```
+
+Hoặc thủ công:
+
+```bat
+python -m pip install -r requirements.txt
+python run.py
+```
+
+Nếu thiếu thư viện, chạy:
+
+```bat
+python run.py --install
+```
+
+### Linux / macOS
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
