@@ -12,6 +12,14 @@ Tool test đăng nhập qua **API chính thức** trên domain bạn kiểm soá
 - Log chi tiết từng lần đăng nhập vào `logs/<job_id>.jsonl`
 - Mock login API sẵn có để demo trên `localhost`
 
+## Ghi lại & Chạy lại (login 1 lần)
+
+1. **Login mẫu** — nhập URL + `user:pass` tài khoản bạn vừa thử login
+2. Nhấn **Ghi lại cách login** → tool lưu recipe (URL, form, headers, CSRF…)
+3. Nhập danh sách acc → **Chạy y hệt cho tất cả acc**
+
+**Hoặc** copy lệnh cURL từ Chrome DevTools (F12 → Network → Copy as cURL) và dán vào ô cURL.
+
 ## Cài đặt
 
 ### Windows

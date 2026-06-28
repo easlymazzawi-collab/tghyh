@@ -330,11 +330,43 @@
   <div class="container">
     <header>
       <h1>Login Tester</h1>
-      <p>Test đăng nhập qua API chính thức — chỉ domain được phép, có rate limit &amp; log kết quả.</p>
+      <p>Ghi lại login 1 lần → tool chạy y hệt cho nhiều tài khoản. Chỉ domain được phép.</p>
       <div class="badge-row" id="allowedDomains"></div>
     </header>
 
     <div class="error-banner" id="errorBanner"></div>
+
+    <div class="card" style="margin-bottom:1.25rem;border-color:#3b82f6">
+      <h2>① Ghi lại login lần đầu → ② Chạy y hệt</h2>
+      <p class="hint" style="margin-bottom:1rem">
+        Cách 1: Nhập URL + tài khoản mẫu (acc bạn vừa login thử).<br>
+        Cách 2: Login trên Chrome → F12 → Network → chuột phải request → <strong>Copy as cURL</strong> → dán bên dưới.
+      </p>
+
+      <label for="sampleCred">Tài khoản mẫu (1 dòng user:pass)</label>
+      <input type="text" id="sampleCred" placeholder="admin:admin123" />
+
+      <label for="curlInput">Hoặc dán lệnh cURL (Copy as cURL từ DevTools)</label>
+      <textarea id="curlInput" style="min-height:90px" placeholder="curl 'http://localhost:8080/mock/login' -H 'Content-Type: application/json' --data-raw '{&quot;username&quot;:&quot;admin&quot;,&quot;password&quot;:&quot;admin123&quot;}'"></textarea>
+
+      <div class="actions">
+        <button class="btn-primary" type="button" id="recordBtn">Ghi lại cách login</button>
+        <button class="btn-secondary" type="button" id="recordDemoBtn">Demo ghi lại</button>
+      </div>
+      <p class="hint" id="recordStatus" style="margin-top:0.5rem"></p>
+
+      <label for="recipeJson">Recipe đã ghi (tool sẽ chạy y như vậy)</label>
+      <textarea id="recipeJson" style="min-height:120px" readonly placeholder="Nhấn 'Ghi lại cách login' để tạo recipe..."></textarea>
+
+      <label for="replayCreds">Danh sách tài khoản chạy lại (user:pass mỗi dòng)</label>
+      <textarea id="replayCreds" placeholder="user1:pass111&#10;user2:pass222&#10;demo:demo2024"></textarea>
+
+      <div class="actions">
+        <button class="btn-primary" type="button" id="replayBtn">Chạy y hệt cho tất cả acc</button>
+      </div>
+    </div>
+
+    <p class="section-title">Hoặc cấu hình thủ công</p>
 
     <div class="grid">
       <div class="card">
@@ -426,6 +458,102 @@
     let pollTimer = null;
     let pollAttempts = 0;
     const MAX_POLL_ATTEMPTS = 300;
+    let savedRecipe = null;
+
+    function buildRecordBody() {
+      const curl = $("curlInput").value.trim();
+      return {
+        name: "my-login-recipe",
+        login_url: $("loginUrl").value.trim(),
+        credentials: $("sampleCred").value.trim(),
+        curl_command: curl,
+        username_field: $("usernameField").value.trim() || "username",
+        password_field: $("passwordField").value.trim() || "password",
+        payload_mode: curl ? "json" : $("payloadMode").value,
+        page_url: $("payloadMode").value === "html_form" ? $("loginUrl").value.trim() : "",
+        post_login_url: $("postLoginUrl").value.trim(),
+        capture_screen: true,
+        verify_sample: true,
+      };
+    }
+
+    async function recordLogin() {
+      hideError();
+      $("recordBtn").disabled = true;
+      $("recordStatus").textContent = "Đang ghi lại...";
+
+      try {
+        const res = await fetch("/api/record-login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildRecordBody()),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Record failed");
+
+        savedRecipe = data.recipe;
+        $("recipeJson").value = JSON.stringify(data.recipe, null, 2);
+        $("recordStatus").textContent = data.message;
+        $("recordStatus").style.color = data.sample_login_ok ? "#22c55e" : "#f59e0b";
+      } catch (err) {
+        showError(err.message);
+        $("recordStatus").textContent = "";
+      } finally {
+        $("recordBtn").disabled = false;
+      }
+    }
+
+    function fillRecordDemo() {
+      $("loginUrl").value = `${window.location.origin}/mock/login-page`;
+      $("payloadMode").value = "html_form";
+      $("sampleCred").value = "admin:admin123";
+      $("curlInput").value = "";
+      $("replayCreds").value = ["user1:pass111", "user2:pass222", "demo:demo2024", "wrong:badpass"].join("\n");
+    }
+
+    async function replayLogin() {
+      hideError();
+      if (!savedRecipe && !$("recipeJson").value.trim()) {
+        showError("Ghi lại login trước (bước 1).");
+        return;
+      }
+
+      let recipe = savedRecipe;
+      if (!recipe) {
+        try {
+          recipe = JSON.parse($("recipeJson").value);
+        } catch {
+          showError("Recipe JSON không hợp lệ.");
+          return;
+        }
+      }
+
+      $("replayBtn").disabled = true;
+      if (pollTimer) clearTimeout(pollTimer);
+      pollAttempts = 0;
+
+      const body = {
+        recipe,
+        credentials: $("replayCreds").value,
+        max_workers: parseInt($("maxWorkers").value, 10) || 3,
+        rate_limit_rps: parseFloat($("rateLimit").value) || 2,
+      };
+
+      try {
+        const res = await fetch("/api/replay", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Replay failed");
+        updateStatus(data);
+        pollJob(data.job_id);
+      } catch (err) {
+        showError(err.message);
+        $("replayBtn").disabled = false;
+      }
+    }
 
     async function loadConfig() {
       const res = await fetch("/api/config");
@@ -647,6 +775,7 @@
       if (pollAttempts > MAX_POLL_ATTEMPTS) {
         showError("Job quá thời gian chờ. Kiểm tra URL API login và thử lại.");
         $("startBtn").disabled = false;
+        $("replayBtn").disabled = false;
         return;
       }
 
@@ -660,6 +789,7 @@
         pollTimer = setTimeout(() => pollJob(jobId), 800);
       } else {
         $("startBtn").disabled = false;
+        $("replayBtn").disabled = false;
         pollTimer = null;
       }
     }
@@ -703,6 +833,9 @@
 
     $("startBtn").addEventListener("click", startTest);
     $("demoBtn").addEventListener("click", fillDemo);
+    $("recordBtn").addEventListener("click", recordLogin);
+    $("recordDemoBtn").addEventListener("click", fillRecordDemo);
+    $("replayBtn").addEventListener("click", replayLogin);
     $("discoverBtn").addEventListener("click", discoverForm);
     $("payloadMode").addEventListener("change", () => {
       $("discoverInfo").style.display = "none";

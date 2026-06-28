@@ -12,7 +12,16 @@ from app.config import ROOT_DIR, app_config
 from app.validators import validate_allowed_domain
 from app.form_discovery import discover_forms_from_html
 from app.login_worker import create_job, get_job, list_allowed_domains, run_login_job
-from app.models import DiscoverFormRequest, DiscoveredFormResponse, JobSummary, TestLoginRequest
+from app.models import (
+    DiscoverFormRequest,
+    DiscoveredFormResponse,
+    JobSummary,
+    RecordLoginRequest,
+    RecordLoginResponse,
+    ReplayJobRequest,
+    TestLoginRequest,
+)
+from app.replay_worker import create_replay_job, record_login, run_replay_job
 
 STATIC_DIR = ROOT_DIR / "static"
 
@@ -52,6 +61,32 @@ def api_config() -> dict:
         "default_max_workers": app_config.default_max_workers,
         "max_credentials_per_job": app_config.max_credentials_per_job,
     }
+
+
+@app.post("/api/record-login", response_model=RecordLoginResponse)
+def api_record_login(request: RecordLoginRequest) -> RecordLoginResponse:
+    try:
+        recipe, sample_ok, message = record_login(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return RecordLoginResponse(
+        recipe=recipe.model_dump(),
+        sample_login_ok=sample_ok,
+        message=message,
+    )
+
+
+@app.post("/api/replay", response_model=JobSummary)
+def api_replay(request: ReplayJobRequest) -> JobSummary:
+    try:
+        job = create_replay_job(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    thread = threading.Thread(target=run_replay_job, args=(job.job_id, request), daemon=True)
+    thread.start()
+    return job
 
 
 @app.post("/api/jobs", response_model=JobSummary)
