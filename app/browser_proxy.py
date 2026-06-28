@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from typing import Dict, List, Tuple
 from urllib.parse import urljoin, urlparse, urlencode, parse_qs, unquote
 
@@ -30,67 +29,89 @@ def _is_navigable(url: str) -> bool:
     return parsed.scheme in {"http", "https"} and bool(parsed.hostname)
 
 
+def _abs_url(page_url: str, ref: str) -> str:
+    return urljoin(page_url, ref.strip())
+
+
+def _fix_asset_urls(soup: BeautifulSoup, page_url: str) -> None:
+    """Load JS/CSS/images from real site — not via localhost (fixes blank page)."""
+    for tag in soup.find_all(["script", "img", "source", "video", "audio", "iframe"]):
+        if tag.get("src"):
+            ref = tag["src"].strip()
+            if ref and not ref.lower().startswith(("data:", "javascript:", "#")):
+                tag["src"] = _abs_url(page_url, ref)
+
+    for tag in soup.find_all("link", href=True):
+        href = tag["href"].strip()
+        rel = tag.get("rel") or []
+        rel_text = " ".join(rel).lower() if isinstance(rel, list) else str(rel).lower()
+        if href and (
+            "stylesheet" in rel_text
+            or "icon" in rel_text
+            or "preload" in rel_text
+            or href.endswith((".css", ".woff2", ".woff", ".ttf"))
+        ):
+            tag["href"] = _abs_url(page_url, href)
+
+
 def rewrite_html(html: str, page_url: str, session_id: str) -> str:
     soup = BeautifulSoup(html, "html.parser")
+    page_url = resolve_real_url(page_url)
+
+    head = soup.find("head")
+    if not head:
+        head = soup.new_tag("head")
+        if soup.html:
+            soup.html.insert(0, head)
+        else:
+            soup.insert(0, head)
 
     if not soup.find("meta", attrs={"name": "viewport"}):
-        viewport = soup.new_tag("meta", attrs={"name": "viewport", "content": "width=device-width, initial-scale=1.0"})
-        head = soup.find("head")
-        if head:
-            head.insert(0, viewport)
-        elif soup.html:
-            soup.html.insert(0, viewport)
+        viewport = soup.new_tag(
+            "meta",
+            attrs={"name": "viewport", "content": "width=device-width, initial-scale=1.0"},
+        )
+        head.insert(0, viewport)
 
-    style = soup.new_tag("style")
-    style.string = """
-    html { overflow-x: auto !important; }
-    body { overflow-x: auto !important; min-height: 100vh; }
-    """
-    head = soup.find("head")
-    if head:
-        head.append(style)
+    # Relative /assets/... must resolve to the real website, not localhost.
+    parsed = urlparse(page_url)
+    base_href = f"{parsed.scheme}://{parsed.netloc}/"
+    existing_base = soup.find("base")
+    if existing_base:
+        existing_base["href"] = base_href
+    else:
+        base_tag = soup.new_tag("base", href=base_href)
+        head.insert(0, base_tag)
+
+    _fix_asset_urls(soup, page_url)
 
     for tag in soup.find_all("a", href=True):
         href = tag["href"].strip()
-        if href.startswith("#") or href.lower().startswith("javascript:"):
+        if href.startswith("#") or href.lower().startswith(("javascript:", "mailto:", "tel:")):
             continue
-        absolute = urljoin(page_url, href)
+        absolute = _abs_url(page_url, href)
         if _is_navigable(absolute):
             try:
                 validate_allowed_domain(absolute)
                 tag["href"] = _proxy_link(absolute, session_id)
             except ValueError:
-                pass
+                tag["href"] = absolute
 
     for tag in soup.find_all("form"):
         action = tag.get("action") or page_url
-        absolute = urljoin(page_url, action)
+        absolute = _abs_url(page_url, action)
         if _is_navigable(absolute):
             try:
                 validate_allowed_domain(absolute)
                 tag["action"] = _proxy_link(absolute, session_id)
             except ValueError:
-                pass
+                tag["action"] = absolute
         if not tag.get("method"):
             tag["method"] = "post"
 
-    for tag in soup.find_all(["img", "script", "link"], src=True):
-        absolute = urljoin(page_url, tag["src"])
-        if _is_navigable(absolute):
-            try:
-                validate_allowed_domain(absolute)
-                tag["src"] = _proxy_link(absolute, session_id)
-            except ValueError:
-                pass
-
-    for tag in soup.find_all("link", href=True):
-        absolute = urljoin(page_url, tag["href"])
-        if _is_navigable(absolute):
-            try:
-                validate_allowed_domain(absolute)
-                tag["href"] = _proxy_link(absolute, session_id)
-            except ValueError:
-                pass
+    style = soup.new_tag("style")
+    style.string = "html,body{overflow:auto!important;min-height:100vh;margin:0;}"
+    head.append(style)
 
     recorder = soup.new_tag("script")
     recorder.string = """
@@ -113,7 +134,10 @@ def rewrite_html(html: str, page_url: str, session_id: str) -> str:
     if soup.body:
         soup.body.append(recorder)
     else:
-        soup.append(recorder)
+        body = soup.new_tag("body")
+        body.append(recorder)
+        if soup.html:
+            soup.html.append(body)
 
     return str(soup)
 
